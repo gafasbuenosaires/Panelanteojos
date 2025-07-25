@@ -212,28 +212,16 @@ class GoogleSheetsService {
     return estadosMap[estado] || 'pendiente';
   }
 
-  // Método para actualizar el estado de un pedido en Google Sheets
+  // Método para actualizar el estado de un pedido en Google Sheets automáticamente
   async updatePedidoEstado(idCliente, fecha, nuevoEstado) {
     try {
-      console.log('🔄 Actualizando estado en Google Sheets:', idCliente, fecha, nuevoEstado);
+      console.log('🔄 Actualizando estado automáticamente en Google Sheets:', idCliente, fecha, nuevoEstado);
       
       if (!this.spreadsheetId || !this.apiKey) {
         throw new Error('Configuración incompleta para actualizar Google Sheets');
       }
 
-      // ⚠️ NOTA: La API de solo lectura no permite escritura
-      // Necesitamos implementar OAuth2 para escribir en Google Sheets
-      console.warn('⚠️ Actualización de Google Sheets requiere OAuth2 - implementando solución alternativa');
-      
-      // Por ahora, mostrar en consola lo que se intentaría actualizar
-      console.log('📝 Pedido a actualizar:', {
-        idCliente,
-        fecha, 
-        estadoAnterior: 'desconocido',
-        estadoNuevo: nuevoEstado
-      });
-      
-      // Buscar el pedido en los datos actuales para obtener más información
+      // Buscar el pedido en los datos actuales para encontrar la fila exacta
       const valuesUrl = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${this.range}?key=${this.apiKey}`;
       const response = await fetch(valuesUrl);
       const sheetData = await response.json();
@@ -261,18 +249,50 @@ class GoogleSheetsService {
               estadoNuevo: nuevoEstado
             });
             
-            // Simular actualización exitosa (ya que no podemos escribir con API Key)
-            console.log('💡 Para habilitar escritura automática, necesitas configurar OAuth2');
-            console.log('📝 Por ahora, actualiza manualmente en Google Sheets o usa una cuenta de servicio');
+            // Intentar actualizar usando la API de Google Sheets
+            const filaGoogleSheets = i + 1; // Google Sheets empieza en 1
+            const columnaEstado = String.fromCharCode(65 + estadoColumnIndex); // A, B, C, etc.
+            const rango = `Pedidos!${columnaEstado}${filaGoogleSheets}`;
             
-            return { 
-              success: true, 
-              message: `Estado encontrado en Google Sheets (fila ${i + 1}). Actualización manual requerida: ${estadoActual} → ${nuevoEstado}`,
-              requiresManualUpdate: true,
-              rowNumber: i + 1,
-              currentState: estadoActual,
-              newState: nuevoEstado
-            };
+            console.log('📝 Actualizando rango:', rango, 'con estado:', nuevoEstado);
+            
+            // Intentar la actualización automática
+            try {
+              const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${rango}?valueInputOption=RAW&key=${this.apiKey}`;
+              
+              const updateResponse = await fetch(updateUrl, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  values: [[nuevoEstado]]
+                })
+              });
+              
+              if (updateResponse.ok) {
+                console.log('🎉 Estado actualizado automáticamente en Google Sheets');
+                return { 
+                  success: true, 
+                  message: 'Estado actualizado automáticamente en Google Sheets',
+                  automatic: true
+                };
+              } else {
+                const errorData = await updateResponse.json();
+                console.error('❌ Error de permisos en Google Sheets:', errorData);
+                
+                // Si es error de permisos, explicar la solución
+                if (updateResponse.status === 403) {
+                  throw new Error('API Key no tiene permisos de escritura. Necesitas configurar una Service Account de Google para escritura automática.');
+                } else {
+                  throw new Error(`Error ${updateResponse.status}: ${errorData.error?.message || 'Error desconocido'}`);
+                }
+              }
+              
+            } catch (apiError) {
+              console.error('❌ Error en API de Google Sheets:', apiError);
+              throw apiError;
+            }
           }
         }
         
@@ -281,17 +301,6 @@ class GoogleSheetsService {
       
     } catch (error) {
       console.error('❌ Error al actualizar estado en Google Sheets:', error);
-      
-      // Si es un error de permisos (403), dar mensaje específico
-      if (error.message.includes('403') || error.message.includes('permission')) {
-        console.log('🔐 Error de permisos detectado - API Key solo tiene permisos de lectura');
-        return {
-          success: false,
-          message: 'La API Key actual solo permite lectura. Para sincronización automática se requiere OAuth2 o cuenta de servicio.',
-          requiresOAuth: true
-        };
-      }
-      
       throw error;
     }
   }

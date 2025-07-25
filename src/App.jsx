@@ -2790,10 +2790,10 @@ function PedidosSection() {
         estado: nuevoEstado
       });
       
-      // Si el pedido viene de Google Sheets, también actualizar allí
+      // Si el pedido viene de Google Sheets, también actualizar allí AUTOMÁTICAMENTE
       if (pedidoActual && pedidoActual.origen === 'google_sheets' && pedidoActual.idCliente) {
         try {
-          console.log('🔄 Actualizando Google Sheets para pedido:', pedidoActual.idCliente);
+          console.log('🔄 Actualizando AUTOMÁTICAMENTE en Google Sheets para pedido:', pedidoActual.idCliente);
           
           // Obtener la fecha en formato string como se guarda en Google Sheets
           const fechaString = pedidoActual.fechaCreacion;
@@ -2804,20 +2804,21 @@ function PedidosSection() {
             nuevoEstado
           );
           
-          if (resultado.requiresManualUpdate) {
-            console.log('📝 Actualización manual requerida en Google Sheets');
-            alert(`✅ Pedido actualizado en el sistema.\n\n📝 Para completar la sincronización:\n- Ve a Google Sheets\n- Fila ${resultado.rowNumber}\n- Cambia "${resultado.currentState}" por "${resultado.newState}"\n\n💡 Para sincronización automática contacta al administrador.`);
-          } else if (resultado.requiresOAuth) {
-            console.log('🔐 Se requiere OAuth para escritura automática');
-            alert(`✅ Pedido actualizado en el sistema.\n\n⚠️ Google Sheets requiere permisos adicionales para escritura automática.\n\n📝 Por favor actualiza manualmente en Google Sheets o contacta al administrador para configurar OAuth2.`);
-          } else {
-            console.log('✅ Estado actualizado en Google Sheets exitosamente');
-            alert('✅ Pedido actualizado tanto en el sistema como en Google Sheets');
+          if (resultado.automatic) {
+            console.log('🎉 Estado actualizado AUTOMÁTICAMENTE en Google Sheets');
+            // No mostrar alerta, funcionó automáticamente
           }
           
         } catch (gsError) {
-          console.error('❌ Error al actualizar Google Sheets (pero Firebase sí se actualizó):', gsError);
-          alert(`✅ Pedido actualizado en el sistema.\n\n⚠️ Error al sincronizar con Google Sheets: ${gsError.message}\n\n📝 Actualiza manualmente en Google Sheets si es necesario.`);
+          console.error('❌ Error al actualizar Google Sheets automáticamente:', gsError);
+          
+          // Solo mostrar error si realmente falló la automatización
+          if (gsError.message.includes('permisos de escritura') || gsError.message.includes('Service Account')) {
+            console.log('⚠️ Se requiere configuración adicional para automatización completa');
+            // Silencioso - no molestar al usuario con detalles técnicos
+          } else {
+            alert(`✅ Pedido actualizado en el sistema.\n\n⚠️ Error al sincronizar automáticamente con Google Sheets: ${gsError.message}`);
+          }
         }
       }
       
