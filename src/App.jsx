@@ -2619,6 +2619,11 @@ function PedidosSection() {
   const [filtroCliente, setFiltroCliente] = useState('');
   const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
+  
+  // Estados para vista detallada de pedidos
+  const [pedidoSeleccionado, setPedidoSeleccionado] = useState(null);
+  const [modoEdicion, setModoEdicion] = useState(false);
+  const [datosEdicion, setDatosEdicion] = useState({});
 
   // Auto-sincronización al cargar la sección
   useEffect(() => {
@@ -2838,6 +2843,73 @@ function PedidosSection() {
         alert(`Error al cambiar el estado del pedido: ${error.message}`);
       }
     }
+  };
+
+  // Funciones para vista detallada
+  const abrirDetallePedido = (pedido) => {
+    setPedidoSeleccionado(pedido);
+    setDatosEdicion({ ...pedido });
+    setModoEdicion(false);
+  };
+
+  const cerrarDetallePedido = () => {
+    setPedidoSeleccionado(null);
+    setModoEdicion(false);
+    setDatosEdicion({});
+  };
+
+  const activarEdicion = () => {
+    setModoEdicion(true);
+  };
+
+  const cancelarEdicion = () => {
+    setDatosEdicion({ ...pedidoSeleccionado });
+    setModoEdicion(false);
+  };
+
+  const guardarCambios = async () => {
+    try {
+      const pedidoDoc = doc(db, 'pedidos', pedidoSeleccionado.id);
+      
+      // Preparar datos para actualizar
+      const datosActualizados = {
+        cliente: datosEdicion.cliente || '',
+        descripcion: datosEdicion.descripcion || '',
+        monto: parseFloat(datosEdicion.monto) || 0,
+        estado: datosEdicion.estado || 'pendiente',
+        fechaCreacion: datosEdicion.fechaCreacion || '',
+        fechaEntrega: datosEdicion.fechaEntrega || null,
+        vendedor: datosEdicion.vendedor || '',
+        optica: datosEdicion.optica || '',
+        cuit: datosEdicion.cuit || '',
+        bruto: parseFloat(datosEdicion.bruto) || 0,
+        iva: parseFloat(datosEdicion.iva) || 0,
+        descuentos: parseFloat(datosEdicion.descuentos) || 0,
+        pago: parseFloat(datosEdicion.pago) || 0,
+        saldo: parseFloat(datosEdicion.saldo) || 0,
+        modelos: datosEdicion.modelos || '',
+        detallePago: datosEdicion.detallePago || ''
+      };
+
+      await updateDoc(pedidoDoc, datosActualizados);
+      
+      // Actualizar el estado local
+      setPedidoSeleccionado({ ...pedidoSeleccionado, ...datosActualizados });
+      setModoEdicion(false);
+      
+      alert('✅ Pedido actualizado exitosamente');
+      
+    } catch (error) {
+      console.error('Error al guardar cambios:', error);
+      alert(`Error al guardar cambios: ${error.message}`);
+    }
+  };
+
+  const handleInputChange = (campo, valor) => {
+    setDatosEdicion(prev => ({
+      ...prev,
+      [campo]: valor
+    }));
   };
 
   const eliminarPedido = async (pedidoId) => {
@@ -3115,8 +3187,14 @@ function PedidosSection() {
                   borderBottom: index < pedidosFiltrados.length - 1 ? '1px solid #f3f4f6' : 'none',
                   display: 'flex',
                   justifyContent: 'space-between',
-                  alignItems: 'flex-start'
-                }}>
+                  alignItems: 'flex-start',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s'
+                }}
+                onClick={() => abrirDetallePedido(pedido)}
+                onMouseEnter={(e) => e.target.style.backgroundColor = '#f8fafc'}
+                onMouseLeave={(e) => e.target.style.backgroundColor = 'white'}
+                >
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
                       <h4 style={{ 
@@ -3156,6 +3234,16 @@ function PedidosSection() {
                           Saldo: ${pedido.saldo.toLocaleString()}
                         </span>
                       )}
+                      <span style={{
+                        padding: '4px 8px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: '500',
+                        backgroundColor: '#f0f0f0',
+                        color: '#666'
+                      }}>
+                        📝 Click para ver detalles
+                      </span>
                     </div>
                     
                     <p style={{ margin: '0 0 8px 0', color: '#4b5563', fontSize: '14px' }}>
@@ -3195,7 +3283,11 @@ function PedidosSection() {
                   }}>
                     <select
                       value={pedido.estado}
-                      onChange={(e) => cambiarEstadoPedido(pedido.id, e.target.value)}
+                      onChange={(e) => {
+                        e.stopPropagation(); // Evitar que se abra el detalle al cambiar estado
+                        cambiarEstadoPedido(pedido.id, e.target.value);
+                      }}
+                      onClick={(e) => e.stopPropagation()} // Evitar que se abra el detalle al hacer click
                       style={{
                         padding: '6px 8px',
                         border: `2px solid ${getEstadoColor(pedido.estado)}`,
@@ -3212,7 +3304,10 @@ function PedidosSection() {
                       <option value="cancelado">❌ Cancelado</option>
                     </select>
                     <button
-                      onClick={() => eliminarPedido(pedido.id)}
+                      onClick={(e) => {
+                        e.stopPropagation(); // Evitar que se abra el detalle al eliminar
+                        eliminarPedido(pedido.id);
+                      }}
                       style={{
                         backgroundColor: '#fef2f2',
                         color: '#dc2626',
@@ -3241,6 +3336,608 @@ function PedidosSection() {
           onConfigSave={handleSaveGoogleSheetsConfig}
           onTestConnection={handleTestConnection}
         />
+      )}
+
+      {/* Modal de Vista Detallada del Pedido */}
+      {pedidoSeleccionado && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            maxWidth: '800px',
+            width: '90%',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+          }}>
+            {/* Header del Modal */}
+            <div style={{
+              padding: '24px 32px',
+              borderBottom: '1px solid #e5e7eb',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: '#f8fafc',
+              borderRadius: '16px 16px 0 0'
+            }}>
+              <div>
+                <h2 style={{ 
+                  margin: '0 0 4px 0', 
+                  fontSize: '24px', 
+                  fontWeight: '700',
+                  color: '#0f172a'
+                }}>
+                  Detalle del Pedido
+                </h2>
+                <p style={{ 
+                  margin: 0, 
+                  color: '#64748b',
+                  fontSize: '14px'
+                }}>
+                  {pedidoSeleccionado.origen === 'google_sheets' ? '📊 Importado desde Google Sheets' : '✋ Creado manualmente'}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {!modoEdicion ? (
+                  <button
+                    onClick={activarEdicion}
+                    style={{
+                      backgroundColor: '#3b82f6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '8px 16px',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    ✏️ Editar
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={guardarCambios}
+                      style={{
+                        backgroundColor: '#10b981',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '8px 16px',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ✅ Guardar
+                    </button>
+                    <button
+                      onClick={cancelarEdicion}
+                      style={{
+                        backgroundColor: '#6b7280',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '8px 16px',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ❌ Cancelar
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={cerrarDetallePedido}
+                  style={{
+                    backgroundColor: '#f3f4f6',
+                    color: '#6b7280',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    fontSize: '18px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Contenido del Modal */}
+            <div style={{ padding: '32px' }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '24px',
+                marginBottom: '32px'
+              }}>
+                {/* Información Básica */}
+                <div>
+                  <h3 style={{ 
+                    margin: '0 0 16px 0', 
+                    fontSize: '18px', 
+                    fontWeight: '600',
+                    color: '#0f172a',
+                    borderBottom: '2px solid #e5e7eb',
+                    paddingBottom: '8px'
+                  }}>
+                    📋 Información Básica
+                  </h3>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
+                        Cliente / Razón Social
+                      </label>
+                      {modoEdicion ? (
+                        <input
+                          type="text"
+                          value={datosEdicion.cliente || ''}
+                          onChange={(e) => handleInputChange('cliente', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            fontSize: '14px'
+                          }}
+                        />
+                      ) : (
+                        <p style={{ margin: 0, fontSize: '14px', color: '#111827', fontWeight: '500' }}>
+                          {pedidoSeleccionado.cliente || 'No especificado'}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
+                        Descripción / Modelos
+                      </label>
+                      {modoEdicion ? (
+                        <textarea
+                          value={datosEdicion.descripcion || datosEdicion.modelos || ''}
+                          onChange={(e) => handleInputChange('descripcion', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            fontSize: '14px',
+                            minHeight: '80px',
+                            resize: 'vertical'
+                          }}
+                        />
+                      ) : (
+                        <p style={{ margin: 0, fontSize: '14px', color: '#111827' }}>
+                          {pedidoSeleccionado.descripcion || pedidoSeleccionado.modelos || 'No especificado'}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
+                        Estado
+                      </label>
+                      {modoEdicion ? (
+                        <select
+                          value={datosEdicion.estado || ''}
+                          onChange={(e) => handleInputChange('estado', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            fontSize: '14px'
+                          }}
+                        >
+                          <option value="pendiente">⏳ Pendiente</option>
+                          <option value="en_proceso">🔄 En Proceso</option>
+                          <option value="completado">✅ Completado</option>
+                          <option value="cancelado">❌ Cancelado</option>
+                        </select>
+                      ) : (
+                        <span style={{
+                          padding: '6px 12px',
+                          borderRadius: '12px',
+                          fontSize: '14px',
+                          fontWeight: '500',
+                          backgroundColor: getEstadoColor(pedidoSeleccionado.estado) + '20',
+                          color: getEstadoColor(pedidoSeleccionado.estado)
+                        }}>
+                          {pedidoSeleccionado.estado === 'pendiente' && '⏳ Pendiente'}
+                          {pedidoSeleccionado.estado === 'en_proceso' && '🔄 En Proceso'}
+                          {pedidoSeleccionado.estado === 'completado' && '✅ Completado'}
+                          {pedidoSeleccionado.estado === 'cancelado' && '❌ Cancelado'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Información Comercial */}
+                <div>
+                  <h3 style={{ 
+                    margin: '0 0 16px 0', 
+                    fontSize: '18px', 
+                    fontWeight: '600',
+                    color: '#0f172a',
+                    borderBottom: '2px solid #e5e7eb',
+                    paddingBottom: '8px'
+                  }}>
+                    💰 Información Comercial
+                  </h3>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
+                        Monto Total
+                      </label>
+                      {modoEdicion ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={datosEdicion.monto || ''}
+                          onChange={(e) => handleInputChange('monto', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            fontSize: '14px'
+                          }}
+                        />
+                      ) : (
+                        <p style={{ margin: 0, fontSize: '18px', color: '#059669', fontWeight: '700' }}>
+                          ${pedidoSeleccionado.monto?.toLocaleString() || '0'}
+                        </p>
+                      )}
+                    </div>
+
+                    {pedidoSeleccionado.origen === 'google_sheets' && (
+                      <>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
+                              Bruto
+                            </label>
+                            {modoEdicion ? (
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={datosEdicion.bruto || ''}
+                                onChange={(e) => handleInputChange('bruto', e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '6px',
+                                  fontSize: '14px'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: 0, fontSize: '14px', color: '#111827' }}>
+                                ${pedidoSeleccionado.bruto?.toLocaleString() || '0'}
+                              </p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
+                              IVA
+                            </label>
+                            {modoEdicion ? (
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={datosEdicion.iva || ''}
+                                onChange={(e) => handleInputChange('iva', e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '6px',
+                                  fontSize: '14px'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: 0, fontSize: '14px', color: '#111827' }}>
+                                ${pedidoSeleccionado.iva?.toLocaleString() || '0'}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
+                              Descuentos
+                            </label>
+                            {modoEdicion ? (
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={datosEdicion.descuentos || ''}
+                                onChange={(e) => handleInputChange('descuentos', e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '6px',
+                                  fontSize: '14px'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: 0, fontSize: '14px', color: '#111827' }}>
+                                ${pedidoSeleccionado.descuentos?.toLocaleString() || '0'}
+                              </p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
+                              Pagado
+                            </label>
+                            {modoEdicion ? (
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={datosEdicion.pago || ''}
+                                onChange={(e) => handleInputChange('pago', e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '6px',
+                                  fontSize: '14px'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: 0, fontSize: '14px', color: '#10b981', fontWeight: '600' }}>
+                                ${pedidoSeleccionado.pago?.toLocaleString() || '0'}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
+                            Saldo Pendiente
+                          </label>
+                          {modoEdicion ? (
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={datosEdicion.saldo || ''}
+                              onChange={(e) => handleInputChange('saldo', e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '8px 12px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '6px',
+                                fontSize: '14px'
+                              }}
+                            />
+                          ) : (
+                            <p style={{ 
+                              margin: 0, 
+                              fontSize: '16px', 
+                              color: pedidoSeleccionado.saldo > 0 ? '#dc2626' : '#10b981',
+                              fontWeight: '600'
+                            }}>
+                              ${pedidoSeleccionado.saldo?.toLocaleString() || '0'}
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Información Adicional */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '24px'
+              }}>
+                {/* Fechas */}
+                <div>
+                  <h3 style={{ 
+                    margin: '0 0 16px 0', 
+                    fontSize: '18px', 
+                    fontWeight: '600',
+                    color: '#0f172a',
+                    borderBottom: '2px solid #e5e7eb',
+                    paddingBottom: '8px'
+                  }}>
+                    📅 Fechas
+                  </h3>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
+                        Fecha de Creación
+                      </label>
+                      {modoEdicion ? (
+                        <input
+                          type="date"
+                          value={datosEdicion.fechaCreacion || ''}
+                          onChange={(e) => handleInputChange('fechaCreacion', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            fontSize: '14px'
+                          }}
+                        />
+                      ) : (
+                        <p style={{ margin: 0, fontSize: '14px', color: '#111827' }}>
+                          {pedidoSeleccionado.fechaCreacion || 'No especificada'}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
+                        Fecha de Entrega
+                      </label>
+                      {modoEdicion ? (
+                        <input
+                          type="date"
+                          value={datosEdicion.fechaEntrega || ''}
+                          onChange={(e) => handleInputChange('fechaEntrega', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            fontSize: '14px'
+                          }}
+                        />
+                      ) : (
+                        <p style={{ margin: 0, fontSize: '14px', color: '#111827' }}>
+                          {pedidoSeleccionado.fechaEntrega || 'No programada'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Información del Negocio */}
+                <div>
+                  <h3 style={{ 
+                    margin: '0 0 16px 0', 
+                    fontSize: '18px', 
+                    fontWeight: '600',
+                    color: '#0f172a',
+                    borderBottom: '2px solid #e5e7eb',
+                    paddingBottom: '8px'
+                  }}>
+                    🏪 Información del Negocio
+                  </h3>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
+                        Vendedor
+                      </label>
+                      {modoEdicion ? (
+                        <input
+                          type="text"
+                          value={datosEdicion.vendedor || ''}
+                          onChange={(e) => handleInputChange('vendedor', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            fontSize: '14px'
+                          }}
+                        />
+                      ) : (
+                        <p style={{ margin: 0, fontSize: '14px', color: '#111827' }}>
+                          {pedidoSeleccionado.vendedor || 'No asignado'}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
+                        Óptica
+                      </label>
+                      {modoEdicion ? (
+                        <input
+                          type="text"
+                          value={datosEdicion.optica || ''}
+                          onChange={(e) => handleInputChange('optica', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            fontSize: '14px'
+                          }}
+                        />
+                      ) : (
+                        <p style={{ margin: 0, fontSize: '14px', color: '#111827' }}>
+                          {pedidoSeleccionado.optica || 'No especificada'}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
+                        CUIT
+                      </label>
+                      {modoEdicion ? (
+                        <input
+                          type="text"
+                          value={datosEdicion.cuit || ''}
+                          onChange={(e) => handleInputChange('cuit', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            fontSize: '14px'
+                          }}
+                        />
+                      ) : (
+                        <p style={{ margin: 0, fontSize: '14px', color: '#111827', fontFamily: 'monospace' }}>
+                          {pedidoSeleccionado.cuit || 'No especificado'}
+                        </p>
+                      )}
+                    </div>
+
+                    {pedidoSeleccionado.origen === 'google_sheets' && (
+                      <div>
+                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
+                          Detalle de Pago
+                        </label>
+                        {modoEdicion ? (
+                          <textarea
+                            value={datosEdicion.detallePago || ''}
+                            onChange={(e) => handleInputChange('detallePago', e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              border: '1px solid #d1d5db',
+                              borderRadius: '6px',
+                              fontSize: '14px',
+                              minHeight: '60px',
+                              resize: 'vertical'
+                            }}
+                          />
+                        ) : (
+                          <p style={{ margin: 0, fontSize: '14px', color: '#111827' }}>
+                            {pedidoSeleccionado.detallePago || 'No especificado'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
