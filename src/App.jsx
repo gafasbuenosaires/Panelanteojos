@@ -2619,8 +2619,18 @@ function PedidosSection() {
 
   // Auto-sincronización al cargar la sección
   useEffect(() => {
+    console.log('PedidosSection useEffect ejecutándose...');
+    console.log('autoSyncEnabled:', autoSyncEnabled);
+    console.log('googleSheetsConfig:', googleSheetsConfig);
+    
     if (autoSyncEnabled && googleSheetsConfig.spreadsheetId && googleSheetsConfig.apiKey) {
+      console.log('Iniciando carga automática desde Google Sheets...');
       loadPedidosFromSheets(true); // true indica que es carga automática
+    } else {
+      console.log('No se carga automáticamente. Razones:');
+      console.log('- autoSyncEnabled:', autoSyncEnabled);
+      console.log('- spreadsheetId:', !!googleSheetsConfig.spreadsheetId);
+      console.log('- apiKey:', !!googleSheetsConfig.apiKey);
     }
   }, []); // Solo se ejecuta una vez al montar el componente
 
@@ -2637,7 +2647,11 @@ function PedidosSection() {
   };
 
   const loadPedidosFromSheets = async (isAutoSync = false) => {
+    console.log('loadPedidosFromSheets iniciado. isAutoSync:', isAutoSync);
+    console.log('Configuración actual:', googleSheetsConfig);
+    
     if (!googleSheetsConfig.spreadsheetId || !googleSheetsConfig.apiKey) {
+      console.log('Configuración incompleta');
       if (!isAutoSync) {
         alert('Por favor configura Google Sheets primero');
       }
@@ -2646,25 +2660,32 @@ function PedidosSection() {
 
     setIsLoadingFromSheets(true);
     try {
+      console.log('Importando servicio de Google Sheets...');
       const { default: googleSheetsService } = await import('./services/googleSheets.js');
       googleSheetsService.configure(googleSheetsConfig);
       
+      console.log('Obteniendo pedidos desde Google Sheets...');
       const pedidosFromSheets = await googleSheetsService.getPedidos();
+      console.log('Pedidos obtenidos de Google Sheets:', pedidosFromSheets.length, pedidosFromSheets);
       
       if (isAutoSync) {
+        console.log('Modo auto-sync: eliminando pedidos existentes de Google Sheets...');
         // En carga automática, borra todos los pedidos de Google Sheets existentes y los vuelve a cargar
         const existentesQuery = query(
           collection(db, 'pedidos'),
           where('origen', '==', 'google_sheets')
         );
         const existentesSnapshot = await getDocs(existentesQuery);
+        console.log('Pedidos existentes en Firebase:', existentesSnapshot.docs.length);
         
         // Borrar pedidos existentes de Google Sheets
         for (const docSnap of existentesSnapshot.docs) {
           await deleteDoc(doc(db, 'pedidos', docSnap.id));
         }
+        console.log('Pedidos existentes eliminados');
         
         // Agregar todos los pedidos actuales de Google Sheets
+        console.log('Agregando pedidos a Firebase...');
         for (const pedido of pedidosFromSheets) {
           await addDoc(collection(db, 'pedidos'), {
             ...pedido,
@@ -2672,6 +2693,7 @@ function PedidosSection() {
             fechaEntrega: pedido.fechaEntrega ? new Date(pedido.fechaEntrega) : null
           });
         }
+        console.log('Pedidos agregados a Firebase');
         
         setUltimaActualizacion(new Date());
       } else {

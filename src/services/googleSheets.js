@@ -18,26 +18,37 @@ class GoogleSheetsService {
   // Método para obtener datos de la hoja de cálculo
   async getPedidos() {
     try {
+      console.log('GoogleSheetsService.getPedidos() iniciado');
+      console.log('spreadsheetId:', this.spreadsheetId);
+      console.log('apiKey:', this.apiKey ? 'Configurada' : 'No configurada');
+      console.log('range:', this.range);
+      
       if (!this.spreadsheetId || !this.apiKey) {
         throw new Error('Configuración incompleta. Necesitas spreadsheetId y apiKey.');
       }
 
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${this.range}?key=${this.apiKey}`;
+      console.log('URL de Google Sheets:', url);
       
       const response = await fetch(url);
+      console.log('Respuesta de Google Sheets:', response.status, response.statusText);
       
       if (!response.ok) {
         throw new Error(`Error al obtener datos: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
+      console.log('Datos recibidos de Google Sheets:', data);
       
       if (!data.values || data.values.length === 0) {
+        console.log('No hay valores en la respuesta');
         return [];
       }
 
       // Convertir los datos de la hoja en objetos de pedidos
-      return this.convertirDatosAPedidos(data.values);
+      const pedidos = this.convertirDatosAPedidos(data.values);
+      console.log('Pedidos convertidos:', pedidos.length, pedidos);
+      return pedidos;
       
     } catch (error) {
       console.error('Error al obtener pedidos de Google Sheets:', error);
@@ -47,10 +58,12 @@ class GoogleSheetsService {
 
   // Convertir los datos crudos de la hoja en objetos estructurados
   convertirDatosAPedidos(values) {
+    console.log('convertirDatosAPedidos iniciado con', values.length, 'filas');
     if (values.length === 0) return [];
 
     // Asumimos que la primera fila contiene los headers
     const headers = values[0];
+    console.log('Headers encontrados:', headers);
     const pedidos = [];
 
     // Mapeo de columnas específicas de tu hoja "Pedidos"
@@ -71,6 +84,8 @@ class GoogleSheetsService {
       estado: this.findColumnIndex(headers, ['ESTADO', 'estado']),
       detallePago: this.findColumnIndex(headers, ['DETALLE DE PAGO', 'detalle de pago', 'detalle pago'])
     };
+    
+    console.log('Mapeo de columnas:', columnMap);
 
     // Procesar cada fila (saltando el header)
     for (let i = 1; i < values.length; i++) {
