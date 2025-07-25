@@ -404,23 +404,40 @@ class GoogleSheetsService {
               
               if (updateResponse.ok) {
                 const responseData = await updateResponse.json();
-                console.log('🎉 Estado actualizado AUTOMÁTICAMENTE en Google Sheets');
+                console.log('🎉 ÉXITO: Estado actualizado automáticamente en Google Sheets');
                 console.log('📄 Respuesta completa:', responseData);
+                alert('✅ Estado actualizado automáticamente en Google Sheets');
                 return { 
                   success: true, 
                   message: 'Estado actualizado automáticamente en Google Sheets',
                   automatic: true
                 };
               } else {
-                const errorData = await updateResponse.json();
-                console.error('❌ Error al actualizar Google Sheets:', errorData);
+                console.error('❌ FALLO: Response status:', updateResponse.status);
+                console.error('❌ FALLO: Response text:', updateResponse.statusText);
+                
+                let errorData;
+                try {
+                  errorData = await updateResponse.json();
+                  console.error('❌ FALLO: Error data:', errorData);
+                } catch (parseError) {
+                  console.error('❌ FALLO: No se pudo parsear respuesta de error');
+                  errorData = { error: { message: `HTTP ${updateResponse.status}` } };
+                }
                 
                 // Verificar si es problema de permisos
                 if (updateResponse.status === 403) {
-                  console.error('🚫 Error 403 - La Service Account no tiene permisos en la hoja');
-                  console.error('💡 Solución: Comparte Google Sheets con:', SERVICE_ACCOUNT.client_email);
+                  console.error('🚫 PROBLEMA: Error 403 - Sin permisos de escritura');
+                  console.error('💡 SOLUCIÓN: Comparte Google Sheets con:', SERVICE_ACCOUNT.client_email);
+                  alert(`🚫 ERROR: Debes compartir Google Sheets con ${SERVICE_ACCOUNT.client_email} como Editor`);
                   throw new Error(`FALTA COMPARTIR: Comparte la hoja con ${SERVICE_ACCOUNT.client_email} como Editor`);
+                } else if (updateResponse.status === 401) {
+                  console.error('🚫 PROBLEMA: Error 401 - Problema de autenticación');
+                  alert('🚫 ERROR: Problema de autenticación con Google Sheets');
+                  throw new Error('Error de autenticación con Google Sheets');
                 } else {
+                  console.error('🚫 PROBLEMA: Error desconocido:', updateResponse.status);
+                  alert(`🚫 ERROR: ${updateResponse.status} - ${errorData.error?.message || 'Error desconocido'}`);
                   throw new Error(`Error ${updateResponse.status}: ${errorData.error?.message || 'Error desconocido'}`);
                 }
               }
