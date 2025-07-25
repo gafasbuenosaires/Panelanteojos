@@ -93,8 +93,20 @@ class GoogleSheetsService {
       
       // Solo procesar filas que tengan datos
       if (row.some(cell => cell && cell.trim())) {
+        // Generar un ID único combinando múltiples campos para evitar duplicados incorrectos
+        const idCliente = this.getCellValue(row, columnMap.id);
+        const fecha = this.getCellValue(row, columnMap.fecha);
+        const vendedor = this.getCellValue(row, columnMap.vendedor);
+        const total = this.getCellValue(row, columnMap.total);
+        
+        // Crear un ID único basado en múltiples campos
+        const idUnico = idCliente && fecha 
+          ? `${idCliente}-${fecha}-${vendedor || ''}-${total || ''}`.replace(/\s/g, '')
+          : `row-${i}`;
+        
         const pedido = {
-          id: this.getCellValue(row, columnMap.id) || `row-${i}`,
+          id: idUnico, // Usar ID único generado
+          idCliente: idCliente, // Mantener el ID original del cliente por separado
           cliente: this.getCellValue(row, columnMap.cliente) || 'Cliente no especificado',
           descripcion: this.getCellValue(row, columnMap.modelos) || 'Sin descripción',
           monto: this.parseNumber(this.getCellValue(row, columnMap.total)) || 0,
@@ -116,6 +128,7 @@ class GoogleSheetsService {
           detallePago: this.getCellValue(row, columnMap.detallePago) || ''
         };
 
+        console.log('Pedido procesado con ID único:', idUnico, pedido);
         pedidos.push(pedido);
       }
     }
