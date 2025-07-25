@@ -1,11 +1,131 @@
 // Servicio para integración con Google Sheets
 // Este servicio maneja la conexión y lectura de datos desde Google Sheets
 
+// Configuración de Service Account para escritura automática
+const SERVICE_ACCOUNT = {
+  type: "service_account",
+  project_id: "mi-proyecto-460112",
+  private_key_id: "28d79b1c01eb5ec9d06a319656d70b9fd0286d06",
+  private_key: "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC24rcvEY49Tclc\nFikX3ARKC6+wJ/9DiFhmNRCdy210UEhDL3/akgqGSMX19xyOH3IOZd9X1kofoe26\nPRh+h5EbCHifT04DzCLnmPcdznBNaWeE6SXHxbaUdEk8FQ+prWiv3XWgTwy4BJyh\ndSqZ4N7mLYmgJ8f1MDLNYejdoJwDd/VMqrN52TwN+cF5PcHsAv951Dyqw5FzgxTM\nXfQSsWU7FCrOXuN3QnT6MohHITZsc4DoM4OMCbqJadha/XAGvyZQDEK6SkO3WVD/\nWHzXzxB8TmeSCmyDWfHINgm5Q/mCYwJChHw1HARxP5K8x08D8dh3mWA4jqQN9ise\nrZqnNjTHAgMBAAECggEAJSl6eakCkzhsMzcZkIyXnogzYgMunoVlGRetUbMVga4S\nkPxk6YAFfXXqK+nTtplzLrPKp2mW1EiuKsrhYEyh0rFs+Uo/GwxvB0qQ5FCfh0tk\nyqApmid1y0K54uiQrzTacen5TeLiPb5KKZDKYExOXs1gCtgqjIsHt64uiGJrcVSk\n6tUaLqkScIyBi28tg68vGK5cryyqmwqXvpnyPEMJFOTc1mpfBVdm1Gr6nGPZ8394\nVpFWXrb2fjLWtyOcw+DIsc5r35uImrG5Xfir17kLCepRtIVlCKKVqeagS8KQxkg3\n+Sq60BtfVsuo7xn2W+96athBw/nEcMfcWusWm4NE2QKBgQD7SXZ40RdP25c/F7se\nB1lnhzYabbmh3477fdz1KQIJMfsFAlfaQ3Do9nXJPCqAxZbqW6eutYL6LLbYfXcG\npcoidLvtxujdoXHrWB0Q9ayPYFXT/nS3Qj1H+DVlz3M1aOruRN3tkBTtA5Rx2Whk\naGsxyO+PAykNGDAYfeDajMDWXQKBgQC6UNQNrkAkfZuLNKXb1h21Pzvk9nF1eb98\n9TJ9a0QHIGEHl2ibNfalJKvAiQDuEPLGdA/IdP+4oZIg/OkqM2MATucbuL2mBMnj\nRAmxlJHozUg6GA1nA5DEj/aaED77ywST/ja79SrH9Hu1jGfJ8tyXwjNjcAmirQap\nSY4Id+z9cwKBgQC5TI/PQahmG/Co9s/lsdesrxknXfhANMGUFFkGc6nrq+6F4Bd2\nfLrbHzr2HKbe9FV4FgRNoc2mu6hNdh96SHEI/XnDOiVnoXCG8h/k7LTFuW0w+XeJ\n14+m7ZI6tEIphWeQMjpQvymfKT+iwIXpXNKHELwOgm8YF9kHhnNz1c0xhQKBgBAf\nRGo2pNhDgj0mfh+qxIFVinJCnQjEUzyV3xuZN5bCR4Mnp+aeYcxigvYzJMB0+P0R\nN/hpn2Mzn/h4yhhbv/pb2YW9k7OVAH9I+OnD6GhTsydLw4Uhetp3dqhYNYsGQ0wn\nGEdlbKFG15mbH7QK7um25Ul6fWr1O/lUIxU6g2hfAoGAWGzoVhHyOo0PHx+L/Z2E\ngOa1np/wpdjIathLp+5lKxEB0IjP4GoTrOwzOWp1yXxwPplgfDLGIRKLQwm0F5CX\n2oglwNk5s63usTAnl88jHGAm0G8e8SqlU9c4wrumSGKQp0EG0aeYTn61+VTCFdSU\ns+83lu3cJhc9+nD+CaWhAQ8=\n-----END PRIVATE KEY-----\n",
+  client_email: "gafasbuenosaires@mi-proyecto-460112.iam.gserviceaccount.com",
+  client_id: "104037729538289621769",
+  auth_uri: "https://accounts.google.com/o/oauth2/auth",
+  token_uri: "https://oauth2.googleapis.com/token",
+  auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+  client_x509_cert_url: "https://www.googleapis.com/robot/v1/metadata/x509/gafasbuenosaires%40mi-proyecto-460112.iam.gserviceaccount.com",
+  universe_domain: "googleapis.com"
+};
+
 class GoogleSheetsService {
   constructor() {
     this.spreadsheetId = null;
     this.apiKey = null;
     this.range = 'Pedidos!A1:O1000'; // Rango específico para la hoja "Pedidos"
+    this.accessToken = null;
+    this.tokenExpiry = 0;
+  }
+
+  // Función para generar JWT usando Web Crypto API
+  async generateJWT() {
+    const header = {
+      alg: 'RS256',
+      typ: 'JWT'
+    };
+
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+      iss: SERVICE_ACCOUNT.client_email,
+      scope: 'https://www.googleapis.com/auth/spreadsheets',
+      aud: 'https://oauth2.googleapis.com/token',
+      exp: now + 3600,
+      iat: now
+    };
+
+    const encoder = new TextEncoder();
+    
+    // Codificar header y payload
+    const encodedHeader = btoa(JSON.stringify(header)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+    const encodedPayload = btoa(JSON.stringify(payload)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+    
+    const message = `${encodedHeader}.${encodedPayload}`;
+    
+    // Preparar la clave privada
+    const privateKeyPem = SERVICE_ACCOUNT.private_key
+      .replace(/-----BEGIN PRIVATE KEY-----/, '')
+      .replace(/-----END PRIVATE KEY-----/, '')
+      .replace(/\s/g, '');
+    
+    try {
+      // Convertir la clave privada desde base64
+      const binaryKey = atob(privateKeyPem);
+      const keyArray = new Uint8Array(binaryKey.length);
+      for (let i = 0; i < binaryKey.length; i++) {
+        keyArray[i] = binaryKey.charCodeAt(i);
+      }
+
+      // Importar la clave privada
+      const cryptoKey = await crypto.subtle.importKey(
+        'pkcs8',
+        keyArray,
+        {
+          name: 'RSASSA-PKCS1-v1_5',
+          hash: 'SHA-256'
+        },
+        false,
+        ['sign']
+      );
+
+      // Firmar el mensaje
+      const signature = await crypto.subtle.sign(
+        'RSASSA-PKCS1-v1_5',
+        cryptoKey,
+        encoder.encode(message)
+      );
+
+      // Codificar la firma
+      const signatureArray = new Uint8Array(signature);
+      const signatureBase64 = btoa(String.fromCharCode(...signatureArray))
+        .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+
+      return `${message}.${signatureBase64}`;
+    } catch (error) {
+      console.error('Error generando JWT:', error);
+      throw new Error('No se pudo generar JWT para autenticación');
+    }
+  }
+
+  // Obtener access token usando Service Account
+  async getAccessToken() {
+    if (this.accessToken && Date.now() < this.tokenExpiry) {
+      return this.accessToken;
+    }
+
+    try {
+      const jwt = await this.generateJWT();
+      
+      const response = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Error obteniendo access token: ${error}`);
+      }
+
+      const data = await response.json();
+      this.accessToken = data.access_token;
+      this.tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000; // 1 minuto antes de expirar
+
+      console.log('🔑 Access token obtenido exitosamente');
+      return this.accessToken;
+    } catch (error) {
+      console.error('Error obteniendo access token:', error);
+      throw error;
+    }
   }
 
   // Configurar el servicio con los datos necesarios
@@ -217,8 +337,8 @@ class GoogleSheetsService {
     try {
       console.log('🔄 Actualizando estado automáticamente en Google Sheets:', idCliente, fecha, nuevoEstado);
       
-      if (!this.spreadsheetId || !this.apiKey) {
-        throw new Error('Configuración incompleta para actualizar Google Sheets');
+      if (!this.spreadsheetId) {
+        throw new Error('spreadsheetId no configurado');
       }
 
       // Buscar el pedido en los datos actuales para encontrar la fila exacta
@@ -249,20 +369,24 @@ class GoogleSheetsService {
               estadoNuevo: nuevoEstado
             });
             
-            // Intentar actualizar usando la API de Google Sheets
+            // Actualizar usando Service Account con OAuth2
             const filaGoogleSheets = i + 1; // Google Sheets empieza en 1
             const columnaEstado = String.fromCharCode(65 + estadoColumnIndex); // A, B, C, etc.
             const rango = `Pedidos!${columnaEstado}${filaGoogleSheets}`;
             
-            console.log('📝 Actualizando rango:', rango, 'con estado:', nuevoEstado);
+            console.log('📝 Actualizando rango con OAuth2:', rango, 'con estado:', nuevoEstado);
             
-            // Intentar la actualización automática
             try {
-              const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${rango}?valueInputOption=RAW&key=${this.apiKey}`;
+              // Obtener access token
+              const accessToken = await this.getAccessToken();
+              
+              // URL para actualizar usando OAuth2
+              const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${rango}?valueInputOption=RAW`;
               
               const updateResponse = await fetch(updateUrl, {
                 method: 'PUT',
                 headers: {
+                  'Authorization': `Bearer ${accessToken}`,
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
@@ -271,7 +395,7 @@ class GoogleSheetsService {
               });
               
               if (updateResponse.ok) {
-                console.log('🎉 Estado actualizado automáticamente en Google Sheets');
+                console.log('🎉 Estado actualizado AUTOMÁTICAMENTE en Google Sheets');
                 return { 
                   success: true, 
                   message: 'Estado actualizado automáticamente en Google Sheets',
@@ -279,19 +403,13 @@ class GoogleSheetsService {
                 };
               } else {
                 const errorData = await updateResponse.json();
-                console.error('❌ Error de permisos en Google Sheets:', errorData);
-                
-                // Si es error de permisos, explicar la solución
-                if (updateResponse.status === 403) {
-                  throw new Error('API Key no tiene permisos de escritura. Necesitas configurar una Service Account de Google para escritura automática.');
-                } else {
-                  throw new Error(`Error ${updateResponse.status}: ${errorData.error?.message || 'Error desconocido'}`);
-                }
+                console.error('❌ Error al actualizar Google Sheets:', errorData);
+                throw new Error(`Error ${updateResponse.status}: ${errorData.error?.message || 'Error desconocido'}`);
               }
               
-            } catch (apiError) {
-              console.error('❌ Error en API de Google Sheets:', apiError);
-              throw apiError;
+            } catch (authError) {
+              console.error('❌ Error de autenticación OAuth2:', authError);
+              throw new Error(`Error de autenticación: ${authError.message}`);
             }
           }
         }
