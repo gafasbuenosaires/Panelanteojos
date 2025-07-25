@@ -2812,11 +2812,14 @@ function PedidosSection() {
         } catch (gsError) {
           console.error('❌ Error al actualizar Google Sheets automáticamente:', gsError);
           
-          // Solo mostrar error si realmente falló la automatización
-          if (gsError.message.includes('permisos de escritura') || gsError.message.includes('Service Account')) {
+          // Mostrar mensaje específico según el error
+          if (gsError.message.includes('FALTA COMPARTIR')) {
+            alert(`✅ Pedido actualizado en el sistema.\n\n🔗 Para completar la sincronización automática:\n${gsError.message}\n\n⚠️ Una vez compartido, la sincronización será automática.`);
+          } else if (gsError.message.includes('permisos de escritura') || gsError.message.includes('Service Account')) {
             console.log('⚠️ Se requiere configuración adicional para automatización completa');
             // Silencioso - no molestar al usuario con detalles técnicos
           } else {
+            console.error('💥 Error inesperado:', gsError);
             alert(`✅ Pedido actualizado en el sistema.\n\n⚠️ Error al sincronizar automáticamente con Google Sheets: ${gsError.message}`);
           }
         }

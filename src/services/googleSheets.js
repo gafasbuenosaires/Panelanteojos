@@ -378,10 +378,18 @@ class GoogleSheetsService {
             
             try {
               // Obtener access token
+              console.log('🔑 Obteniendo access token para OAuth2...');
               const accessToken = await this.getAccessToken();
+              console.log('✅ Access token obtenido:', accessToken ? 'SÍ' : 'NO');
               
               // URL para actualizar usando OAuth2
               const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${rango}?valueInputOption=RAW`;
+              console.log('🌐 URL de actualización:', updateUrl);
+              
+              const requestBody = {
+                values: [[nuevoEstado]]
+              };
+              console.log('📦 Cuerpo de la petición:', requestBody);
               
               const updateResponse = await fetch(updateUrl, {
                 method: 'PUT',
@@ -389,13 +397,15 @@ class GoogleSheetsService {
                   'Authorization': `Bearer ${accessToken}`,
                   'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                  values: [[nuevoEstado]]
-                })
+                body: JSON.stringify(requestBody)
               });
               
+              console.log('📡 Respuesta de Google Sheets:', updateResponse.status, updateResponse.statusText);
+              
               if (updateResponse.ok) {
+                const responseData = await updateResponse.json();
                 console.log('🎉 Estado actualizado AUTOMÁTICAMENTE en Google Sheets');
+                console.log('📄 Respuesta completa:', responseData);
                 return { 
                   success: true, 
                   message: 'Estado actualizado automáticamente en Google Sheets',
@@ -404,7 +414,15 @@ class GoogleSheetsService {
               } else {
                 const errorData = await updateResponse.json();
                 console.error('❌ Error al actualizar Google Sheets:', errorData);
-                throw new Error(`Error ${updateResponse.status}: ${errorData.error?.message || 'Error desconocido'}`);
+                
+                // Verificar si es problema de permisos
+                if (updateResponse.status === 403) {
+                  console.error('🚫 Error 403 - La Service Account no tiene permisos en la hoja');
+                  console.error('💡 Solución: Comparte Google Sheets con:', SERVICE_ACCOUNT.client_email);
+                  throw new Error(`FALTA COMPARTIR: Comparte la hoja con ${SERVICE_ACCOUNT.client_email} como Editor`);
+                } else {
+                  throw new Error(`Error ${updateResponse.status}: ${errorData.error?.message || 'Error desconocido'}`);
+                }
               }
               
             } catch (authError) {
