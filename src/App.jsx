@@ -465,61 +465,90 @@ function VendedoresSection() {
   };
 
   // Funciones para manejar movimientos
-  const agregarMovimiento = (vendedorId, movimientoData) => {
-    const nuevoMovimiento = {
-      id: Date.now(),
-      vendedorId: vendedorId,
-      fecha: movimientoData.fecha || new Date().toISOString().split('T')[0],
-      ...movimientoData
-    };
-    
-    setMovimientosVendedores(prev => [...prev, nuevoMovimiento]);
-    
-    // Actualizar saldo del vendedor
-    const ajuste = movimientoData.tipo === 'haber' ? movimientoData.monto : -movimientoData.monto;
-    setVendedores(prev => prev.map(v => 
-      v.id === vendedorId ? { ...v, saldo: v.saldo + ajuste } : v
-    ));
+  const agregarMovimiento = async (vendedorId, movimientoData) => {
+    try {
+      const nuevoMovimiento = {
+        vendedorId: vendedorId,
+        fecha: movimientoData.fecha || new Date().toISOString().split('T')[0],
+        ...movimientoData,
+        fechaCreacion: serverTimestamp()
+      };
+      
+      // Agregar a Firebase
+      const docRef = await addDoc(collection(db, 'movimientos_vendedores'), nuevoMovimiento);
+      
+      // Actualizar saldo del vendedor en Firebase
+      const ajuste = movimientoData.tipo === 'haber' ? movimientoData.monto : -movimientoData.monto;
+      const vendedorRef = doc(db, 'vendedores', vendedorId);
+      
+      // Obtener el vendedor actual
+      const vendedor = vendedores.find(v => v.id === vendedorId);
+      if (vendedor) {
+        await updateDoc(vendedorRef, {
+          saldo: vendedor.saldo + ajuste
+        });
+      }
+      
+      return docRef.id;
+    } catch (error) {
+      console.error('Error al agregar movimiento:', error);
+      alert('Error al agregar movimiento');
+      return null;
+    }
   };
 
-  const editarMovimiento = (movimientoId, movimientoData) => {
-    const movimientoAnterior = movimientosVendedores.find(m => m.id === movimientoId);
-    if (!movimientoAnterior) return;
+  const editarMovimiento = async (movimientoId, movimientoData) => {
+    try {
+      const movimientoAnterior = movimientosVendedores.find(m => m.id === movimientoId);
+      if (!movimientoAnterior) return;
 
-    // Revertir el efecto del movimiento anterior
-    const ajusteAnterior = movimientoAnterior.tipo === 'haber' ? -movimientoAnterior.monto : movimientoAnterior.monto;
-    
-    // Aplicar el nuevo movimiento
-    const ajusteNuevo = movimientoData.tipo === 'haber' ? movimientoData.monto : -movimientoData.monto;
-    
-    setMovimientosVendedores(prev => prev.map(m => 
-      m.id === movimientoId ? { ...m, ...movimientoData } : m
-    ));
-    
-    // Actualizar saldo del vendedor
-    const ajusteTotal = ajusteAnterior + ajusteNuevo;
-    setVendedores(prev => prev.map(v => 
-      v.id === movimientoAnterior.vendedorId ? { ...v, saldo: v.saldo + ajusteTotal } : v
-    ));
+      // Calcular ajustes de saldo
+      const ajusteAnterior = movimientoAnterior.tipo === 'haber' ? -movimientoAnterior.monto : movimientoAnterior.monto;
+      const ajusteNuevo = movimientoData.tipo === 'haber' ? movimientoData.monto : -movimientoData.monto;
+      const ajusteTotal = ajusteAnterior + ajusteNuevo;
+      
+      // Actualizar en Firebase
+      await updateDoc(doc(db, 'movimientos_vendedores', movimientoId), movimientoData);
+      
+      // Actualizar saldo del vendedor en Firebase
+      const vendedor = vendedores.find(v => v.id === movimientoAnterior.vendedorId);
+      if (vendedor) {
+        await updateDoc(doc(db, 'vendedores', movimientoAnterior.vendedorId), {
+          saldo: vendedor.saldo + ajusteTotal
+        });
+      }
+    } catch (error) {
+      console.error('Error al editar movimiento:', error);
+      alert('Error al editar movimiento');
+    }
   };
 
-  const eliminarMovimiento = (movimientoId) => {
-    const movimiento = movimientosVendedores.find(m => m.id === movimientoId);
-    if (!movimiento) return;
+  const eliminarMovimiento = async (movimientoId) => {
+    try {
+      const movimiento = movimientosVendedores.find(m => m.id === movimientoId);
+      if (!movimiento) return;
 
-    // Revertir el efecto del movimiento
-    const ajuste = movimiento.tipo === 'haber' ? -movimiento.monto : movimiento.monto;
-    
-    setMovimientosVendedores(prev => prev.filter(m => m.id !== movimientoId));
-    
-    // Actualizar saldo del vendedor
-    setVendedores(prev => prev.map(v => 
-      v.id === movimiento.vendedorId ? { ...v, saldo: v.saldo + ajuste } : v
-    ));
+      // Revertir el efecto del movimiento en el saldo
+      const ajuste = movimiento.tipo === 'haber' ? -movimiento.monto : movimiento.monto;
+      
+      // Eliminar de Firebase
+      await deleteDoc(doc(db, 'movimientos_vendedores', movimientoId));
+      
+      // Actualizar saldo del vendedor en Firebase
+      const vendedor = vendedores.find(v => v.id === movimiento.vendedorId);
+      if (vendedor) {
+        await updateDoc(doc(db, 'vendedores', movimiento.vendedorId), {
+          saldo: vendedor.saldo + ajuste
+        });
+      }
+    } catch (error) {
+      console.error('Error al eliminar movimiento:', error);
+      alert('Error al eliminar movimiento');
+    }
   };
 
   // Función para eliminar vendedor
-  const eliminarVendedor = (vendedorId) => {
+  const eliminarVendedor = async (vendedorId) => {
     // Verificar si el vendedor tiene movimientos
     const tieneMovimientos = movimientosVendedores.some(m => m.vendedorId === vendedorId);
     
@@ -527,13 +556,37 @@ function VendedoresSection() {
       const confirmar = confirm('Este vendedor tiene movimientos registrados. ¿Estás seguro de eliminarlo? Esto también eliminará todos sus movimientos.');
       if (!confirmar) return false;
       
-      // Eliminar todos los movimientos del vendedor
-      setMovimientosVendedores(prev => prev.filter(m => m.vendedorId !== vendedorId));
+      // Eliminar todos los movimientos del vendedor de Firebase
+      try {
+        const movimientosQuery = query(
+          collection(db, 'movimientos_vendedores'),
+          orderBy('fecha', 'desc')
+        );
+        const movimientosSnapshot = await getDocs(movimientosQuery);
+        
+        // Eliminar movimientos uno por uno
+        for (const movDoc of movimientosSnapshot.docs) {
+          const movData = movDoc.data();
+          if (movData.vendedorId === vendedorId) {
+            await deleteDoc(doc(db, 'movimientos_vendedores', movDoc.id));
+          }
+        }
+      } catch (error) {
+        console.error('Error al eliminar movimientos:', error);
+        alert('Error al eliminar movimientos del vendedor');
+        return false;
+      }
     }
     
-    // Eliminar el vendedor
-    setVendedores(prev => prev.filter(v => v.id !== vendedorId));
-    return true;
+    // Eliminar el vendedor de Firebase
+    try {
+      await deleteDoc(doc(db, 'vendedores', vendedorId));
+      return true;
+    } catch (error) {
+      console.error('Error al eliminar vendedor:', error);
+      alert('Error al eliminar vendedor');
+      return false;
+    }
   };
 
   return (
