@@ -2742,12 +2742,20 @@ function PedidosSection() {
   // Funciones para manejar pedidos
   const cambiarEstadoPedido = async (pedidoId, nuevoEstado) => {
     try {
-      await updateDoc(doc(db, 'pedidos', pedidoId), {
+      console.log('Cambiando estado del pedido:', pedidoId, 'a:', nuevoEstado);
+      
+      // Buscar el documento en Firebase usando el ID del documento (no el ID personalizado)
+      const pedidoDoc = doc(db, 'pedidos', pedidoId);
+      await updateDoc(pedidoDoc, {
         estado: nuevoEstado
       });
+      
+      console.log('Estado del pedido cambiado exitosamente');
     } catch (error) {
       console.error('Error al cambiar estado del pedido:', error);
-      alert('Error al cambiar el estado del pedido');
+      console.error('ID del pedido:', pedidoId);
+      console.error('Nuevo estado:', nuevoEstado);
+      alert(`Error al cambiar el estado del pedido: ${error.message}`);
     }
   };
 
