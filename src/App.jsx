@@ -20,6 +20,51 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState(null);
 
+  // Estados globales para datos de Firebase
+  const [vendedores, setVendedores] = useState([]);
+  const [movimientosCaja, setMovimientosCaja] = useState([]);
+  const [pedidos, setPedidos] = useState([]);
+
+  // Cargar datos globales desde Firebase
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    // Cargar vendedores
+    const unsubscribeVendedores = onSnapshot(collection(db, 'vendedores'), (snapshot) => {
+      const vendedoresData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setVendedores(vendedoresData);
+    });
+
+    // Cargar movimientos de caja
+    const unsubscribeMovimientos = onSnapshot(collection(db, 'movimientos_caja'), (snapshot) => {
+      const movimientos = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        fecha: doc.data().fecha?.toDate ? doc.data().fecha.toDate().toISOString().split('T')[0] : doc.data().fecha
+      }));
+      setMovimientosCaja(movimientos);
+    });
+
+    // Cargar pedidos
+    const unsubscribePedidos = onSnapshot(collection(db, 'pedidos'), (snapshot) => {
+      const pedidosData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        fechaCreacion: doc.data().fechaCreacion?.toDate ? doc.data().fechaCreacion.toDate().toISOString().split('T')[0] : doc.data().fechaCreacion
+      }));
+      setPedidos(pedidosData);
+    });
+
+    return () => {
+      unsubscribeVendedores();
+      unsubscribeMovimientos();
+      unsubscribePedidos();
+    };
+  }, [isLoggedIn]);
+
   // Login temporal
   const handleLogin = (email, password) => {
     if (email === 'admin@malnacont.com' && password === 'admin123') {
@@ -138,7 +183,13 @@ function App() {
         </div>
 
         <div style={{ padding: '40px' }}>
-          {currentView === 'dashboard' && <DashboardSection />}
+          {currentView === 'dashboard' && (
+            <DashboardSection 
+              vendedores={vendedores}
+              movimientosCaja={movimientosCaja}
+              pedidos={pedidos}
+            />
+          )}
           {currentView === 'vendedores' && <VendedoresSection />}
           {currentView === 'caja' && <CajaSection />}
           {currentView === 'pedidos' && <PedidosSection />}
@@ -289,7 +340,37 @@ function LoginComponent({ onLogin }) {
 }
 
 // Componente Dashboard
-function DashboardSection() {
+function DashboardSection({ vendedores = [], movimientosCaja = [], pedidos = [] }) {
+  // Calcular estadísticas reales
+  const vendedoresActivos = vendedores.length;
+  
+  // Calcular saldo en caja
+  const totalIngresos = movimientosCaja
+    .filter(m => m.tipo === 'ingreso')
+    .reduce((sum, m) => sum + (m.monto || 0), 0);
+  
+  const totalEgresos = movimientosCaja
+    .filter(m => m.tipo === 'egreso')
+    .reduce((sum, m) => sum + (m.monto || 0), 0);
+  
+  const saldoEnCaja = totalIngresos - totalEgresos;
+  
+  // Calcular pedidos pendientes
+  const pedidosPendientes = pedidos.filter(p => p.estado === 'pendiente').length;
+  
+  // Calcular ventas del mes (movimientos de vendedores de tipo cobro del mes actual)
+  const fechaActual = new Date();
+  const mesActual = fechaActual.getMonth();
+  const añoActual = fechaActual.getFullYear();
+  
+  const ventasDelMes = movimientosCaja
+    .filter(m => {
+      if (m.tipo !== 'ingreso' || !m.fecha) return false;
+      const fechaMovimiento = new Date(m.fecha);
+      return fechaMovimiento.getMonth() === mesActual && fechaMovimiento.getFullYear() === añoActual;
+    })
+    .reduce((sum, m) => sum + (m.monto || 0), 0);
+
   return (
     <div>
       <div style={{ 
@@ -300,27 +381,27 @@ function DashboardSection() {
       }}>
         <StatsCard 
           title="Ventas del Mes" 
-          value="$125,400" 
+          value={`$${ventasDelMes.toLocaleString()}`} 
           color="#10b981"
-          subtitle="↗ +12% vs mes anterior"
+          subtitle={ventasDelMes > 0 ? "Con datos reales" : "Sin ventas este mes"}
         />
         <StatsCard 
           title="Vendedores Activos" 
-          value="8" 
+          value={vendedoresActivos.toString()} 
           color="#3b82f6"
-          subtitle="2 nuevos este mes"
+          subtitle={vendedoresActivos > 0 ? "En la base de datos" : "Sin vendedores"}
         />
         <StatsCard 
           title="Pedidos Pendientes" 
-          value="23" 
+          value={pedidosPendientes.toString()} 
           color="#f59e0b"
-          subtitle="5 urgentes"
+          subtitle={pedidosPendientes > 0 ? "Requieren atención" : "Sin pedidos pendientes"}
         />
         <StatsCard 
           title="Saldo en Caja" 
-          value="$45,230" 
-          color="#8b5cf6"
-          subtitle="Último movimiento: hace 2h"
+          value={`$${saldoEnCaja.toLocaleString()}`} 
+          color={saldoEnCaja >= 0 ? "#8b5cf6" : "#ef4444"}
+          subtitle={saldoEnCaja === 0 ? "Caja en cero" : saldoEnCaja > 0 ? "Saldo positivo" : "Saldo negativo"}
         />
       </div>
 
