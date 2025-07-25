@@ -2684,16 +2684,32 @@ function PedidosSection() {
         }
         console.log('Pedidos existentes eliminados');
         
-        // Agregar todos los pedidos actuales de Google Sheets
-        console.log('Agregando pedidos a Firebase...');
+        // Crear un Set para evitar duplicados por ID original
+        const pedidosUnicos = new Map();
+        
+        // Filtrar pedidos únicos por ID original de Google Sheets
         for (const pedido of pedidosFromSheets) {
+          const idOriginal = pedido.id;
+          if (!pedidosUnicos.has(idOriginal)) {
+            pedidosUnicos.set(idOriginal, pedido);
+          } else {
+            console.log('Pedido duplicado encontrado, manteniéndose el primero:', idOriginal);
+          }
+        }
+        
+        const pedidosParaGuardar = Array.from(pedidosUnicos.values());
+        console.log('Agregando pedidos únicos a Firebase:', pedidosParaGuardar.length, 'de', pedidosFromSheets.length, 'originales');
+        
+        // Agregar solo los pedidos únicos a Firebase
+        for (const pedido of pedidosParaGuardar) {
           await addDoc(collection(db, 'pedidos'), {
             ...pedido,
+            idOriginal: pedido.id, // Guardar el ID original de Google Sheets por separado
             fechaCreacion: pedido.fechaCreacion ? new Date(pedido.fechaCreacion) : new Date(),
             fechaEntrega: pedido.fechaEntrega ? new Date(pedido.fechaEntrega) : null
           });
         }
-        console.log('Pedidos agregados a Firebase');
+        console.log('Pedidos únicos agregados a Firebase');
         
         setUltimaActualizacion(new Date());
       } else {
@@ -2703,22 +2719,33 @@ function PedidosSection() {
           where('origen', '==', 'google_sheets')
         );
         const existentesSnapshot = await getDocs(existentesQuery);
-        const existentesIds = new Set(existentesSnapshot.docs.map(doc => doc.data().id));
+        const existentesIds = new Set(existentesSnapshot.docs.map(doc => doc.data().idOriginal || doc.data().id));
         
-        // Filtrar solo pedidos nuevos de Google Sheets
-        const pedidosNuevos = pedidosFromSheets.filter(pedido => !existentesIds.has(pedido.id));
+        // Crear un Set para evitar duplicados por ID original
+        const pedidosUnicos = new Map();
         
-        // Guardar pedidos nuevos en Firebase
+        // Filtrar pedidos únicos por ID original de Google Sheets
+        for (const pedido of pedidosFromSheets) {
+          const idOriginal = pedido.id;
+          if (!pedidosUnicos.has(idOriginal) && !existentesIds.has(idOriginal)) {
+            pedidosUnicos.set(idOriginal, pedido);
+          }
+        }
+        
+        const pedidosNuevos = Array.from(pedidosUnicos.values());
+        
+        // Guardar pedidos nuevos únicos en Firebase
         for (const pedido of pedidosNuevos) {
           await addDoc(collection(db, 'pedidos'), {
             ...pedido,
+            idOriginal: pedido.id, // Guardar el ID original de Google Sheets por separado
             fechaCreacion: pedido.fechaCreacion ? new Date(pedido.fechaCreacion) : new Date(),
             fechaEntrega: pedido.fechaEntrega ? new Date(pedido.fechaEntrega) : null
           });
         }
         
         setUltimaActualizacion(new Date());
-        alert(`✅ Se importaron ${pedidosNuevos.length} pedidos nuevos desde Google Sheets (${pedidosFromSheets.length} total encontrados)`);
+        alert(`✅ Se importaron ${pedidosNuevos.length} pedidos nuevos únicos desde Google Sheets (${pedidosFromSheets.length} total encontrados, duplicados filtrados)`);
       }
       
     } catch (error) {
