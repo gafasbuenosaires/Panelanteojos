@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import GoogleSheetsConfig from './components/GoogleSheetsConfig.jsx';
+import googleSheetsService from './services/googleSheets.js';
 import { db } from './config/firebase.js';
 import { 
   collection, 
@@ -2779,11 +2780,37 @@ function PedidosSection() {
         throw new Error('ID del pedido no válido');
       }
       
+      // Buscar el pedido en el estado actual para obtener información adicional
+      const pedidoActual = pedidos.find(p => p.id === pedidoId);
+      console.log('Pedido encontrado en estado:', pedidoActual);
+      
       // Buscar el documento en Firebase usando el ID del documento (no el ID personalizado)
       const pedidoDoc = doc(db, 'pedidos', pedidoId);
       await updateDoc(pedidoDoc, {
         estado: nuevoEstado
       });
+      
+      // Si el pedido viene de Google Sheets, también actualizar allí
+      if (pedidoActual && pedidoActual.origen === 'google_sheets' && pedidoActual.idCliente) {
+        try {
+          console.log('Actualizando Google Sheets para pedido:', pedidoActual.idCliente);
+          
+          // Obtener la fecha en formato string como se guarda en Google Sheets
+          const fechaString = pedidoActual.fechaCreacion;
+          
+          await googleSheetsService.updatePedidoEstado(
+            pedidoActual.idCliente, 
+            fechaString,
+            nuevoEstado
+          );
+          
+          console.log('Estado actualizado en Google Sheets exitosamente');
+        } catch (gsError) {
+          console.error('Error al actualizar Google Sheets (pero Firebase sí se actualizó):', gsError);
+          // No hacer throw aquí para que la actualización de Firebase no se revierta
+          alert(`Pedido actualizado en el sistema, pero hubo un error al sincronizar con Google Sheets: ${gsError.message}`);
+        }
+      }
       
       console.log('Estado del pedido cambiado exitosamente');
     } catch (error) {

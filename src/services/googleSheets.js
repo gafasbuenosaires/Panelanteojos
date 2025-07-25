@@ -212,6 +212,85 @@ class GoogleSheetsService {
     return estadosMap[estado] || 'pendiente';
   }
 
+  // Método para actualizar el estado de un pedido en Google Sheets
+  async updatePedidoEstado(idCliente, fecha, nuevoEstado) {
+    try {
+      console.log('Actualizando estado en Google Sheets:', idCliente, fecha, nuevoEstado);
+      
+      if (!this.spreadsheetId || !this.apiKey) {
+        throw new Error('Configuración incompleta para actualizar Google Sheets');
+      }
+
+      // Primero obtener todos los datos para encontrar la fila correcta
+      const data = await this.getPedidos();
+      
+      // Encontrar el pedido que coincida con idCliente y fecha
+      let filaEncontrada = -1;
+      const valuesUrl = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${this.range}?key=${this.apiKey}`;
+      const response = await fetch(valuesUrl);
+      const sheetData = await response.json();
+      
+      if (sheetData.values && sheetData.values.length > 0) {
+        const headers = sheetData.values[0];
+        const estadoColumnIndex = this.findColumnIndex(headers, ['ESTADO', 'estado']);
+        const idColumnIndex = this.findColumnIndex(headers, ['ID Cliente', 'id', 'ID']);
+        const fechaColumnIndex = this.findColumnIndex(headers, ['FECHA', 'fecha']);
+        
+        console.log('Índices de columnas:', { estadoColumnIndex, idColumnIndex, fechaColumnIndex });
+        
+        // Buscar la fila que coincida
+        for (let i = 1; i < sheetData.values.length; i++) {
+          const row = sheetData.values[i];
+          const rowIdCliente = this.getCellValue(row, idColumnIndex);
+          const rowFecha = this.getCellValue(row, fechaColumnIndex);
+          
+          console.log(`Fila ${i}: ID=${rowIdCliente}, Fecha=${rowFecha}`);
+          
+          if (rowIdCliente === idCliente && rowFecha === fecha) {
+            filaEncontrada = i + 1; // +1 porque las filas en Google Sheets empiezan en 1
+            break;
+          }
+        }
+        
+        if (filaEncontrada > 0 && estadoColumnIndex !== -1) {
+          // Convertir índice de columna a letra (A, B, C, etc.)
+          const columnaEstado = String.fromCharCode(65 + estadoColumnIndex); // 65 = 'A'
+          const rango = `Pedidos!${columnaEstado}${filaEncontrada}`;
+          
+          console.log('Actualizando rango:', rango, 'con estado:', nuevoEstado);
+          
+          // URL para actualizar una celda específica
+          const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${rango}?valueInputOption=RAW&key=${this.apiKey}`;
+          
+          const updateResponse = await fetch(updateUrl, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              values: [[nuevoEstado]]
+            })
+          });
+          
+          if (updateResponse.ok) {
+            console.log('Estado actualizado exitosamente en Google Sheets');
+            return { success: true, message: 'Estado actualizado en Google Sheets' };
+          } else {
+            const errorData = await updateResponse.json();
+            console.error('Error al actualizar Google Sheets:', errorData);
+            throw new Error(`Error ${updateResponse.status}: ${errorData.error?.message || 'Error desconocido'}`);
+          }
+        } else {
+          throw new Error(`No se encontró el pedido con ID ${idCliente} y fecha ${fecha} en Google Sheets`);
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error al actualizar estado en Google Sheets:', error);
+      throw error;
+    }
+  }
+
   // Método para validar la configuración
   isConfigured() {
     return !!(this.spreadsheetId && this.apiKey);
