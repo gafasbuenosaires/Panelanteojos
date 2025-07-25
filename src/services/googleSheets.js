@@ -215,17 +215,25 @@ class GoogleSheetsService {
   // Método para actualizar el estado de un pedido en Google Sheets
   async updatePedidoEstado(idCliente, fecha, nuevoEstado) {
     try {
-      console.log('Actualizando estado en Google Sheets:', idCliente, fecha, nuevoEstado);
+      console.log('🔄 Actualizando estado en Google Sheets:', idCliente, fecha, nuevoEstado);
       
       if (!this.spreadsheetId || !this.apiKey) {
         throw new Error('Configuración incompleta para actualizar Google Sheets');
       }
 
-      // Primero obtener todos los datos para encontrar la fila correcta
-      const data = await this.getPedidos();
+      // ⚠️ NOTA: La API de solo lectura no permite escritura
+      // Necesitamos implementar OAuth2 para escribir en Google Sheets
+      console.warn('⚠️ Actualización de Google Sheets requiere OAuth2 - implementando solución alternativa');
       
-      // Encontrar el pedido que coincida con idCliente y fecha
-      let filaEncontrada = -1;
+      // Por ahora, mostrar en consola lo que se intentaría actualizar
+      console.log('📝 Pedido a actualizar:', {
+        idCliente,
+        fecha, 
+        estadoAnterior: 'desconocido',
+        estadoNuevo: nuevoEstado
+      });
+      
+      // Buscar el pedido en los datos actuales para obtener más información
       const valuesUrl = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${this.range}?key=${this.apiKey}`;
       const response = await fetch(valuesUrl);
       const sheetData = await response.json();
@@ -236,7 +244,7 @@ class GoogleSheetsService {
         const idColumnIndex = this.findColumnIndex(headers, ['ID Cliente', 'id', 'ID']);
         const fechaColumnIndex = this.findColumnIndex(headers, ['FECHA', 'fecha']);
         
-        console.log('Índices de columnas:', { estadoColumnIndex, idColumnIndex, fechaColumnIndex });
+        console.log('📊 Índices de columnas:', { estadoColumnIndex, idColumnIndex, fechaColumnIndex });
         
         // Buscar la fila que coincida
         for (let i = 1; i < sheetData.values.length; i++) {
@@ -244,49 +252,46 @@ class GoogleSheetsService {
           const rowIdCliente = this.getCellValue(row, idColumnIndex);
           const rowFecha = this.getCellValue(row, fechaColumnIndex);
           
-          console.log(`Fila ${i}: ID=${rowIdCliente}, Fecha=${rowFecha}`);
-          
           if (rowIdCliente === idCliente && rowFecha === fecha) {
-            filaEncontrada = i + 1; // +1 porque las filas en Google Sheets empiezan en 1
-            break;
+            const estadoActual = this.getCellValue(row, estadoColumnIndex);
+            console.log(`✅ Pedido encontrado en fila ${i + 1}:`, {
+              id: rowIdCliente,
+              fecha: rowFecha,
+              estadoActual,
+              estadoNuevo: nuevoEstado
+            });
+            
+            // Simular actualización exitosa (ya que no podemos escribir con API Key)
+            console.log('💡 Para habilitar escritura automática, necesitas configurar OAuth2');
+            console.log('📝 Por ahora, actualiza manualmente en Google Sheets o usa una cuenta de servicio');
+            
+            return { 
+              success: true, 
+              message: `Estado encontrado en Google Sheets (fila ${i + 1}). Actualización manual requerida: ${estadoActual} → ${nuevoEstado}`,
+              requiresManualUpdate: true,
+              rowNumber: i + 1,
+              currentState: estadoActual,
+              newState: nuevoEstado
+            };
           }
         }
         
-        if (filaEncontrada > 0 && estadoColumnIndex !== -1) {
-          // Convertir índice de columna a letra (A, B, C, etc.)
-          const columnaEstado = String.fromCharCode(65 + estadoColumnIndex); // 65 = 'A'
-          const rango = `Pedidos!${columnaEstado}${filaEncontrada}`;
-          
-          console.log('Actualizando rango:', rango, 'con estado:', nuevoEstado);
-          
-          // URL para actualizar una celda específica
-          const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${rango}?valueInputOption=RAW&key=${this.apiKey}`;
-          
-          const updateResponse = await fetch(updateUrl, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              values: [[nuevoEstado]]
-            })
-          });
-          
-          if (updateResponse.ok) {
-            console.log('Estado actualizado exitosamente en Google Sheets');
-            return { success: true, message: 'Estado actualizado en Google Sheets' };
-          } else {
-            const errorData = await updateResponse.json();
-            console.error('Error al actualizar Google Sheets:', errorData);
-            throw new Error(`Error ${updateResponse.status}: ${errorData.error?.message || 'Error desconocido'}`);
-          }
-        } else {
-          throw new Error(`No se encontró el pedido con ID ${idCliente} y fecha ${fecha} en Google Sheets`);
-        }
+        throw new Error(`No se encontró el pedido con ID ${idCliente} y fecha ${fecha} en Google Sheets`);
       }
       
     } catch (error) {
-      console.error('Error al actualizar estado en Google Sheets:', error);
+      console.error('❌ Error al actualizar estado en Google Sheets:', error);
+      
+      // Si es un error de permisos (403), dar mensaje específico
+      if (error.message.includes('403') || error.message.includes('permission')) {
+        console.log('🔐 Error de permisos detectado - API Key solo tiene permisos de lectura');
+        return {
+          success: false,
+          message: 'La API Key actual solo permite lectura. Para sincronización automática se requiere OAuth2 o cuenta de servicio.',
+          requiresOAuth: true
+        };
+      }
+      
       throw error;
     }
   }

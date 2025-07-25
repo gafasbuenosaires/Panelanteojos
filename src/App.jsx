@@ -2793,22 +2793,31 @@ function PedidosSection() {
       // Si el pedido viene de Google Sheets, también actualizar allí
       if (pedidoActual && pedidoActual.origen === 'google_sheets' && pedidoActual.idCliente) {
         try {
-          console.log('Actualizando Google Sheets para pedido:', pedidoActual.idCliente);
+          console.log('🔄 Actualizando Google Sheets para pedido:', pedidoActual.idCliente);
           
           // Obtener la fecha en formato string como se guarda en Google Sheets
           const fechaString = pedidoActual.fechaCreacion;
           
-          await googleSheetsService.updatePedidoEstado(
+          const resultado = await googleSheetsService.updatePedidoEstado(
             pedidoActual.idCliente, 
             fechaString,
             nuevoEstado
           );
           
-          console.log('Estado actualizado en Google Sheets exitosamente');
+          if (resultado.requiresManualUpdate) {
+            console.log('📝 Actualización manual requerida en Google Sheets');
+            alert(`✅ Pedido actualizado en el sistema.\n\n📝 Para completar la sincronización:\n- Ve a Google Sheets\n- Fila ${resultado.rowNumber}\n- Cambia "${resultado.currentState}" por "${resultado.newState}"\n\n💡 Para sincronización automática contacta al administrador.`);
+          } else if (resultado.requiresOAuth) {
+            console.log('🔐 Se requiere OAuth para escritura automática');
+            alert(`✅ Pedido actualizado en el sistema.\n\n⚠️ Google Sheets requiere permisos adicionales para escritura automática.\n\n📝 Por favor actualiza manualmente en Google Sheets o contacta al administrador para configurar OAuth2.`);
+          } else {
+            console.log('✅ Estado actualizado en Google Sheets exitosamente');
+            alert('✅ Pedido actualizado tanto en el sistema como en Google Sheets');
+          }
+          
         } catch (gsError) {
-          console.error('Error al actualizar Google Sheets (pero Firebase sí se actualizó):', gsError);
-          // No hacer throw aquí para que la actualización de Firebase no se revierta
-          alert(`Pedido actualizado en el sistema, pero hubo un error al sincronizar con Google Sheets: ${gsError.message}`);
+          console.error('❌ Error al actualizar Google Sheets (pero Firebase sí se actualizó):', gsError);
+          alert(`✅ Pedido actualizado en el sistema.\n\n⚠️ Error al sincronizar con Google Sheets: ${gsError.message}\n\n📝 Actualiza manualmente en Google Sheets si es necesario.`);
         }
       }
       
@@ -3007,11 +3016,35 @@ function PedidosSection() {
                 fontSize: '14px',
                 fontWeight: '500',
                 cursor: isLoadingFromSheets ? 'not-allowed' : 'pointer',
-                opacity: isLoadingFromSheets ? 0.6 : 1
+                opacity: isLoadingFromSheets ? 0.6 : 1,
+                marginRight: '8px'
               }}
             >
               {isLoadingFromSheets ? '🔄 Cargando...' : '📥 Sincronizar'}
             </button>
+            
+            {/* Botón para abrir Google Sheets */}
+            {googleSheetsConfig.spreadsheetId && (
+              <button 
+                onClick={() => {
+                  const url = `https://docs.google.com/spreadsheets/d/${googleSheetsConfig.spreadsheetId}/edit`;
+                  window.open(url, '_blank');
+                }}
+                style={{
+                  padding: '8px 12px',
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer'
+                }}
+                title="Abrir Google Sheets en nueva pestaña"
+              >
+                🔗 Abrir Hoja
+              </button>
+            )}
           </div>
         </div>
 
