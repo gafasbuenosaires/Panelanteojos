@@ -2587,8 +2587,10 @@ function PedidosSection() {
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'pedidos'), (snapshot) => {
       const pedidosFirebase = snapshot.docs.map(doc => ({
-        id: doc.id,
         ...doc.data(),
+        id: doc.id, // Asegurar que el ID sea del documento de Firebase (sobrescribir cualquier ID de Google Sheets)
+        firebaseId: doc.id, // Guardar explícitamente el ID de Firebase
+        idOriginal: doc.data().idOriginal || doc.data().id, // Mantener el ID original de Google Sheets por separado
         fechaCreacion: doc.data().fechaCreacion?.toDate ? doc.data().fechaCreacion.toDate().toISOString().split('T')[0] : doc.data().fechaCreacion,
         fechaEntrega: doc.data().fechaEntrega?.toDate ? doc.data().fechaEntrega.toDate().toISOString().split('T')[0] : doc.data().fechaEntrega,
         origen: doc.data().origen || 'manual'
@@ -2770,6 +2772,12 @@ function PedidosSection() {
   const cambiarEstadoPedido = async (pedidoId, nuevoEstado) => {
     try {
       console.log('Cambiando estado del pedido:', pedidoId, 'a:', nuevoEstado);
+      console.log('Tipo de pedidoId:', typeof pedidoId);
+      
+      // Validar que el pedidoId no sea null o undefined
+      if (!pedidoId || pedidoId === 'undefined' || pedidoId === 'null') {
+        throw new Error('ID del pedido no válido');
+      }
       
       // Buscar el documento en Firebase usando el ID del documento (no el ID personalizado)
       const pedidoDoc = doc(db, 'pedidos', pedidoId);
@@ -2782,7 +2790,13 @@ function PedidosSection() {
       console.error('Error al cambiar estado del pedido:', error);
       console.error('ID del pedido:', pedidoId);
       console.error('Nuevo estado:', nuevoEstado);
-      alert(`Error al cambiar el estado del pedido: ${error.message}`);
+      
+      // Mostrar mensaje de error más específico
+      if (error.code === 'not-found') {
+        alert(`Error: No se encontró el pedido con ID "${pedidoId}". El documento puede haber sido eliminado.`);
+      } else {
+        alert(`Error al cambiar el estado del pedido: ${error.message}`);
+      }
     }
   };
 
