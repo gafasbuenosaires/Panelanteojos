@@ -11,6 +11,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  where,
   serverTimestamp 
 } from 'firebase/firestore';
 
@@ -1722,44 +1723,25 @@ function DetalleVendedorModal({ vendedor, movimientos, onClose, onAgregarMovimie
 
 // Componente de Control de Caja
 function CajaSection() {
-  const [movimientosCaja, setMovimientosCaja] = useState([
-    {
-      id: 1,
-      fecha: '2025-07-25',
-      tipo: 'ingreso',
-      monto: 15000,
-      categoria: 'Ventas',
-      descripcion: 'Venta de anteojos - Cliente Juan Pérez',
-      numeroComprobante: 'FC001-0001'
-    },
-    {
-      id: 2,
-      fecha: '2025-07-25',
-      tipo: 'egreso',
-      monto: 2500,
-      categoria: 'Gastos Operativos',
-      descripcion: 'Pago de servicios - Electricidad',
-      numeroComprobante: 'REC-0001'
-    },
-    {
-      id: 3,
-      fecha: '2025-07-24',
-      tipo: 'ingreso',
-      monto: 8500,
-      categoria: 'Ventas',
-      descripcion: 'Venta de lentes de contacto',
-      numeroComprobante: 'FC001-0002'
-    },
-    {
-      id: 4,
-      fecha: '2025-07-24',
-      tipo: 'egreso',
-      monto: 5000,
-      categoria: 'Compras',
-      descripcion: 'Compra de materiales - Proveedor XYZ',
-      numeroComprobante: 'FC-B-0123'
-    }
-  ]);
+  const [movimientosCaja, setMovimientosCaja] = useState([]);
+
+  // Cargar movimientos de caja desde Firebase
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'movimientos_caja'), (snapshot) => {
+      const movimientos = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        fecha: doc.data().fecha?.toDate ? doc.data().fecha.toDate().toISOString().split('T')[0] : doc.data().fecha
+      }));
+      
+      // Ordenar por fecha descendente (más recientes primero)
+      movimientos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+      
+      setMovimientosCaja(movimientos);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const [categorias, setCategorias] = useState([
     'Ventas',
@@ -1821,7 +1803,7 @@ function CajaSection() {
   });
 
   // Funciones para manejar movimientos
-  const agregarMovimiento = (e) => {
+  const agregarMovimiento = async (e) => {
     e.preventDefault();
     
     if (!formMovimiento.monto || !formMovimiento.categoria || !formMovimiento.descripcion) {
@@ -1829,14 +1811,19 @@ function CajaSection() {
       return;
     }
 
-    const nuevoMovimiento = {
-      id: Date.now(),
-      ...formMovimiento,
-      monto: parseFloat(formMovimiento.monto)
-    };
+    try {
+      const nuevoMovimiento = {
+        ...formMovimiento,
+        monto: parseFloat(formMovimiento.monto),
+        fecha: new Date(formMovimiento.fecha)
+      };
 
-    setMovimientosCaja(prev => [nuevoMovimiento, ...prev]);
-    cerrarModal();
+      await addDoc(collection(db, 'movimientos_caja'), nuevoMovimiento);
+      cerrarModal();
+    } catch (error) {
+      console.error('Error al agregar movimiento de caja:', error);
+      alert('Error al agregar el movimiento');
+    }
   };
 
   // Funciones para gestionar categorías
@@ -1861,9 +1848,14 @@ function CajaSection() {
     return true;
   };
 
-  const eliminarMovimiento = (movimientoId) => {
+  const eliminarMovimiento = async (movimientoId) => {
     if (confirm('¿Estás seguro de eliminar este movimiento?')) {
-      setMovimientosCaja(prev => prev.filter(m => m.id !== movimientoId));
+      try {
+        await deleteDoc(doc(db, 'movimientos_caja', movimientoId));
+      } catch (error) {
+        console.error('Error al eliminar movimiento de caja:', error);
+        alert('Error al eliminar el movimiento');
+      }
     }
   };
 
@@ -2508,28 +2500,27 @@ function CajaSection() {
 }
 
 function PedidosSection() {
-  const [pedidos, setPedidos] = useState([
-    {
-      id: 1,
-      cliente: 'María González',
-      descripcion: 'Anteojos de lectura + estuche',
-      monto: 8500,
-      estado: 'pendiente',
-      fechaCreacion: '2025-07-24',
-      fechaEntrega: '2025-07-28',
-      origen: 'manual'
-    },
-    {
-      id: 2,
-      cliente: 'Carlos López',
-      descripcion: 'Lentes de contacto mensuales',
-      monto: 12000,
-      estado: 'en_proceso',
-      fechaCreacion: '2025-07-23',
-      fechaEntrega: '2025-07-26',
-      origen: 'manual'
-    }
-  ]);
+  const [pedidos, setPedidos] = useState([]);
+
+  // Cargar pedidos desde Firebase
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'pedidos'), (snapshot) => {
+      const pedidosFirebase = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        fechaCreacion: doc.data().fechaCreacion?.toDate ? doc.data().fechaCreacion.toDate().toISOString().split('T')[0] : doc.data().fechaCreacion,
+        fechaEntrega: doc.data().fechaEntrega?.toDate ? doc.data().fechaEntrega.toDate().toISOString().split('T')[0] : doc.data().fechaEntrega,
+        origen: doc.data().origen || 'manual'
+      }));
+      
+      // Ordenar por fecha de creación descendente (más recientes primero)
+      pedidosFirebase.sort((a, b) => new Date(b.fechaCreacion || 0) - new Date(a.fechaCreacion || 0));
+      
+      setPedidos(pedidosFirebase);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const [showGoogleSheetsConfig, setShowGoogleSheetsConfig] = useState(false);
   const [googleSheetsConfig, setGoogleSheetsConfig] = useState(
@@ -2579,15 +2570,30 @@ function PedidosSection() {
       
       const pedidosFromSheets = await googleSheetsService.getPedidos();
       
-      // Combinar pedidos existentes con los de Google Sheets
-      const pedidosExistentes = pedidos.filter(p => p.origen === 'manual');
-      const todosPedidos = [...pedidosExistentes, ...pedidosFromSheets];
+      // Obtener pedidos existentes de Google Sheets desde Firebase
+      const existentesQuery = query(
+        collection(db, 'pedidos'),
+        where('origen', '==', 'google_sheets')
+      );
+      const existentesSnapshot = await getDocs(existentesQuery);
+      const existentesIds = new Set(existentesSnapshot.docs.map(doc => doc.data().id));
       
-      setPedidos(todosPedidos);
+      // Filtrar solo pedidos nuevos de Google Sheets
+      const pedidosNuevos = pedidosFromSheets.filter(pedido => !existentesIds.has(pedido.id));
+      
+      // Guardar pedidos nuevos en Firebase
+      for (const pedido of pedidosNuevos) {
+        await addDoc(collection(db, 'pedidos'), {
+          ...pedido,
+          fechaCreacion: pedido.fechaCreacion ? new Date(pedido.fechaCreacion) : new Date(),
+          fechaEntrega: pedido.fechaEntrega ? new Date(pedido.fechaEntrega) : null
+        });
+      }
+      
       setUltimaActualizacion(new Date());
       
       if (!isAutoSync) {
-        alert(`✅ Se importaron ${pedidosFromSheets.length} pedidos desde Google Sheets`);
+        alert(`✅ Se importaron ${pedidosNuevos.length} pedidos nuevos desde Google Sheets (${pedidosFromSheets.length} total encontrados)`);
       }
       
     } catch (error) {
@@ -2609,15 +2615,25 @@ function PedidosSection() {
   });
 
   // Funciones para manejar pedidos
-  const cambiarEstadoPedido = (pedidoId, nuevoEstado) => {
-    setPedidos(prev => prev.map(pedido => 
-      pedido.id === pedidoId ? { ...pedido, estado: nuevoEstado } : pedido
-    ));
+  const cambiarEstadoPedido = async (pedidoId, nuevoEstado) => {
+    try {
+      await updateDoc(doc(db, 'pedidos', pedidoId), {
+        estado: nuevoEstado
+      });
+    } catch (error) {
+      console.error('Error al cambiar estado del pedido:', error);
+      alert('Error al cambiar el estado del pedido');
+    }
   };
 
-  const eliminarPedido = (pedidoId) => {
+  const eliminarPedido = async (pedidoId) => {
     if (confirm('¿Estás seguro de eliminar este pedido?')) {
-      setPedidos(prev => prev.filter(p => p.id !== pedidoId));
+      try {
+        await deleteDoc(doc(db, 'pedidos', pedidoId));
+      } catch (error) {
+        console.error('Error al eliminar pedido:', error);
+        alert('Error al eliminar el pedido');
+      }
     }
   };
 
