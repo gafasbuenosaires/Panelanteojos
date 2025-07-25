@@ -2651,29 +2651,51 @@ function PedidosSection() {
       
       const pedidosFromSheets = await googleSheetsService.getPedidos();
       
-      // Obtener pedidos existentes de Google Sheets desde Firebase
-      const existentesQuery = query(
-        collection(db, 'pedidos'),
-        where('origen', '==', 'google_sheets')
-      );
-      const existentesSnapshot = await getDocs(existentesQuery);
-      const existentesIds = new Set(existentesSnapshot.docs.map(doc => doc.data().id));
-      
-      // Filtrar solo pedidos nuevos de Google Sheets
-      const pedidosNuevos = pedidosFromSheets.filter(pedido => !existentesIds.has(pedido.id));
-      
-      // Guardar pedidos nuevos en Firebase
-      for (const pedido of pedidosNuevos) {
-        await addDoc(collection(db, 'pedidos'), {
-          ...pedido,
-          fechaCreacion: pedido.fechaCreacion ? new Date(pedido.fechaCreacion) : new Date(),
-          fechaEntrega: pedido.fechaEntrega ? new Date(pedido.fechaEntrega) : null
-        });
-      }
-      
-      setUltimaActualizacion(new Date());
-      
-      if (!isAutoSync) {
+      if (isAutoSync) {
+        // En carga automática, borra todos los pedidos de Google Sheets existentes y los vuelve a cargar
+        const existentesQuery = query(
+          collection(db, 'pedidos'),
+          where('origen', '==', 'google_sheets')
+        );
+        const existentesSnapshot = await getDocs(existentesQuery);
+        
+        // Borrar pedidos existentes de Google Sheets
+        for (const docSnap of existentesSnapshot.docs) {
+          await deleteDoc(doc(db, 'pedidos', docSnap.id));
+        }
+        
+        // Agregar todos los pedidos actuales de Google Sheets
+        for (const pedido of pedidosFromSheets) {
+          await addDoc(collection(db, 'pedidos'), {
+            ...pedido,
+            fechaCreacion: pedido.fechaCreacion ? new Date(pedido.fechaCreacion) : new Date(),
+            fechaEntrega: pedido.fechaEntrega ? new Date(pedido.fechaEntrega) : null
+          });
+        }
+        
+        setUltimaActualizacion(new Date());
+      } else {
+        // En carga manual, solo agregar pedidos nuevos
+        const existentesQuery = query(
+          collection(db, 'pedidos'),
+          where('origen', '==', 'google_sheets')
+        );
+        const existentesSnapshot = await getDocs(existentesQuery);
+        const existentesIds = new Set(existentesSnapshot.docs.map(doc => doc.data().id));
+        
+        // Filtrar solo pedidos nuevos de Google Sheets
+        const pedidosNuevos = pedidosFromSheets.filter(pedido => !existentesIds.has(pedido.id));
+        
+        // Guardar pedidos nuevos en Firebase
+        for (const pedido of pedidosNuevos) {
+          await addDoc(collection(db, 'pedidos'), {
+            ...pedido,
+            fechaCreacion: pedido.fechaCreacion ? new Date(pedido.fechaCreacion) : new Date(),
+            fechaEntrega: pedido.fechaEntrega ? new Date(pedido.fechaEntrega) : null
+          });
+        }
+        
+        setUltimaActualizacion(new Date());
         alert(`✅ Se importaron ${pedidosNuevos.length} pedidos nuevos desde Google Sheets (${pedidosFromSheets.length} total encontrados)`);
       }
       
