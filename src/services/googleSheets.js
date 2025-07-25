@@ -96,13 +96,30 @@ class GoogleSheetsService {
 
   // Obtener access token usando Service Account
   async getAccessToken() {
+    console.log('🔑 DIAGNÓSTICO TOKEN: Iniciando obtención de access token');
+    console.log('🔑 TOKEN ACTUAL:', this.accessToken ? 'EXISTE' : 'NO EXISTE');
+    console.log('🔑 EXPIRY TIME:', this.tokenExpiry);
+    console.log('🔑 CURRENT TIME:', Date.now());
+    console.log('🔑 TOKEN VÁLIDO:', this.accessToken && Date.now() < this.tokenExpiry);
+    
     if (this.accessToken && Date.now() < this.tokenExpiry) {
+      console.log('🔑 USANDO TOKEN EXISTENTE');
       return this.accessToken;
     }
 
+    console.log('🔑 GENERANDO NUEVO TOKEN');
     try {
-      const jwt = await this.generateJWT();
+      console.log('🔑 PASO 1: Generando JWT...');
+      console.log('🔑 SERVICE ACCOUNT:', {
+        client_email: SERVICE_ACCOUNT.client_email,
+        project_id: SERVICE_ACCOUNT.project_id,
+        private_key_length: SERVICE_ACCOUNT.private_key.length
+      });
       
+      const jwt = await this.generateJWT();
+      console.log('🔑 PASO 1 OK: JWT generado, longitud:', jwt.length);
+      
+      console.log('🔑 PASO 2: Intercambiando JWT por access token...');
       const response = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: {
@@ -111,19 +128,33 @@ class GoogleSheetsService {
         body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`
       });
 
+      console.log('🔑 PASO 2 RESPUESTA:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
       if (!response.ok) {
         const error = await response.text();
+        console.error('🔑 ERROR EN TOKEN:', error);
         throw new Error(`Error obteniendo access token: ${error}`);
       }
 
       const data = await response.json();
+      console.log('🔑 PASO 2 OK: Token response:', {
+        access_token_length: data.access_token?.length,
+        token_type: data.token_type,
+        expires_in: data.expires_in
+      });
+      
       this.accessToken = data.access_token;
       this.tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000; // 1 minuto antes de expirar
 
-      console.log('🔑 Access token obtenido exitosamente');
+      console.log('🔑 ÉXITO TOTAL: Access token configurado');
+      console.log('🔑 NUEVO EXPIRY:', new Date(this.tokenExpiry));
       return this.accessToken;
     } catch (error) {
-      console.error('Error obteniendo access token:', error);
+      console.error('🔑 ERROR TOTAL:', error);
       throw error;
     }
   }
@@ -335,7 +366,13 @@ class GoogleSheetsService {
   // Método para actualizar el estado de un pedido en Google Sheets automáticamente
   async updatePedidoEstado(idCliente, fecha, nuevoEstado) {
     try {
-      console.log('🔄 Actualizando estado automáticamente en Google Sheets:', idCliente, fecha, nuevoEstado);
+      console.log('🔄 INICIO: Actualizando estado automáticamente en Google Sheets');
+      console.log('📋 DATOS:', { idCliente, fecha, nuevoEstado });
+      console.log('🔧 CONFIGURACIÓN:', { 
+        spreadsheetId: this.spreadsheetId, 
+        apiKey: this.apiKey ? 'CONFIGURADA' : 'NO CONFIGURADA',
+        serviceAccount: SERVICE_ACCOUNT.client_email 
+      });
       
       if (!this.spreadsheetId) {
         throw new Error('spreadsheetId no configurado');
@@ -378,67 +415,152 @@ class GoogleSheetsService {
             
             try {
               // Obtener access token
-              console.log('🔑 Obteniendo access token para OAuth2...');
+              console.log('🔑 PASO 1: Obteniendo access token para OAuth2...');
+              console.log('🔑 SERVICE ACCOUNT EMAIL:', SERVICE_ACCOUNT.client_email);
+              console.log('🔑 PROJECT ID:', SERVICE_ACCOUNT.project_id);
+              
               const accessToken = await this.getAccessToken();
-              console.log('✅ Access token obtenido:', accessToken ? 'SÍ' : 'NO');
+              console.log('✅ PASO 1 COMPLETADO: Access token obtenido:', accessToken ? 'SÍ' : 'NO');
+              
+              if (!accessToken) {
+                throw new Error('No se pudo obtener access token');
+              }
               
               // URL para actualizar usando OAuth2
               const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${rango}?valueInputOption=RAW`;
-              console.log('🌐 URL de actualización:', updateUrl);
+              console.log('🌐 PASO 2: URL de actualización:', updateUrl);
+              console.log('🎯 PASO 2: Rango objetivo:', rango);
+              console.log('📝 PASO 2: Nuevo estado:', nuevoEstado);
               
               const requestBody = {
                 values: [[nuevoEstado]]
               };
-              console.log('📦 Cuerpo de la petición:', requestBody);
+              console.log('📦 PASO 2: Cuerpo de la petición:', JSON.stringify(requestBody, null, 2));
               
+              const requestHeaders = {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+              };
+              console.log('🔒 PASO 2: Headers (sin token):', {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer [OCULTO]'
+              });
+              
+              console.log('🚀 PASO 3: Enviando petición PUT a Google Sheets...');
               const updateResponse = await fetch(updateUrl, {
                 method: 'PUT',
-                headers: {
-                  'Authorization': `Bearer ${accessToken}`,
-                  'Content-Type': 'application/json',
-                },
+                headers: requestHeaders,
                 body: JSON.stringify(requestBody)
               });
               
-              console.log('📡 Respuesta de Google Sheets:', updateResponse.status, updateResponse.statusText);
+              console.log('📡 PASO 3 RESPUESTA:', {
+                status: updateResponse.status,
+                statusText: updateResponse.statusText,
+                ok: updateResponse.ok,
+                headers: Object.fromEntries(updateResponse.headers.entries())
+              });
               
               if (updateResponse.ok) {
                 const responseData = await updateResponse.json();
-                console.log('🎉 ÉXITO: Estado actualizado automáticamente en Google Sheets');
-                console.log('📄 Respuesta completa:', responseData);
-                alert('✅ Estado actualizado automáticamente en Google Sheets');
+                console.log('🎉 ÉXITO TOTAL: Estado actualizado automáticamente en Google Sheets');
+                console.log('📄 RESPUESTA COMPLETA:', JSON.stringify(responseData, null, 2));
+                console.log('✅ RESULTADO: Sincronización bidireccional funcionando correctamente');
+                alert('✅ ÉXITO: Estado actualizado automáticamente en Google Sheets');
                 return { 
                   success: true, 
                   message: 'Estado actualizado automáticamente en Google Sheets',
                   automatic: true
                 };
               } else {
-                console.error('❌ FALLO: Response status:', updateResponse.status);
-                console.error('❌ FALLO: Response text:', updateResponse.statusText);
+                console.error('❌ FALLO COMPLETO: Response status:', updateResponse.status);
+                console.error('❌ FALLO COMPLETO: Response text:', updateResponse.statusText);
+                console.error('❌ FALLO COMPLETO: Response headers:', Object.fromEntries(updateResponse.headers.entries()));
                 
                 let errorData;
+                let errorText;
                 try {
-                  errorData = await updateResponse.json();
-                  console.error('❌ FALLO: Error data:', errorData);
-                } catch (parseError) {
-                  console.error('❌ FALLO: No se pudo parsear respuesta de error');
+                  errorText = await updateResponse.text();
+                  console.error('❌ FALLO COMPLETO: Response body (text):', errorText);
+                  
+                  try {
+                    errorData = JSON.parse(errorText);
+                    console.error('❌ FALLO COMPLETO: Response body (JSON):', errorData);
+                  } catch (jsonError) {
+                    console.error('❌ FALLO COMPLETO: No se pudo parsear JSON:', jsonError);
+                    errorData = { error: { message: errorText || `HTTP ${updateResponse.status}` } };
+                  }
+                } catch (textError) {
+                  console.error('❌ FALLO COMPLETO: No se pudo leer response text:', textError);
                   errorData = { error: { message: `HTTP ${updateResponse.status}` } };
                 }
                 
-                // Verificar si es problema de permisos
+                // Diagnóstico específico por código de error
                 if (updateResponse.status === 403) {
-                  console.error('🚫 PROBLEMA: Error 403 - Sin permisos de escritura');
-                  console.error('💡 SOLUCIÓN: Comparte Google Sheets con:', SERVICE_ACCOUNT.client_email);
-                  alert(`🚫 ERROR: Debes compartir Google Sheets con ${SERVICE_ACCOUNT.client_email} como Editor`);
-                  throw new Error(`FALTA COMPARTIR: Comparte la hoja con ${SERVICE_ACCOUNT.client_email} como Editor`);
+                  console.error('🚫 DIAGNÓSTICO: Error 403 - Forbidden');
+                  console.error('🚫 CAUSA PROBABLE: Service Account sin permisos de escritura');
+                  console.error('🚫 SERVICE ACCOUNT:', SERVICE_ACCOUNT.client_email);
+                  console.error('🚫 SPREADSHEET ID:', this.spreadsheetId);
+                  console.error('💡 SOLUCIÓN REQUERIDA: Compartir Google Sheets con Service Account como Editor');
+                  
+                  alert(`🚫 ERROR 403: Sin permisos de escritura
+
+📋 SERVICE ACCOUNT: ${SERVICE_ACCOUNT.client_email}
+📊 SPREADSHEET: ${this.spreadsheetId}
+
+💡 SOLUCIÓN:
+1. Abre tu Google Sheets
+2. Haz clic en "Compartir"
+3. Agrega: ${SERVICE_ACCOUNT.client_email}
+4. Selecciona "Editor"
+5. Enviar
+
+⚠️ Sin este paso, no funcionará la sincronización automática.`);
+                  
+                  throw new Error(`COMPARTIR REQUERIDO: ${SERVICE_ACCOUNT.client_email} necesita permisos de Editor`);
+                  
                 } else if (updateResponse.status === 401) {
-                  console.error('🚫 PROBLEMA: Error 401 - Problema de autenticación');
-                  alert('🚫 ERROR: Problema de autenticación con Google Sheets');
-                  throw new Error('Error de autenticación con Google Sheets');
+                  console.error('🚫 DIAGNÓSTICO: Error 401 - Unauthorized');
+                  console.error('🚫 CAUSA PROBABLE: Token de acceso inválido o expirado');
+                  console.error('🚫 ACCESS TOKEN EXISTE:', !!this.accessToken);
+                  console.error('🚫 TOKEN EXPIRY:', new Date(this.tokenExpiry));
+                  console.error('💡 SOLUCIÓN: Regenerar token de acceso');
+                  
+                  alert('🚫 ERROR 401: Problema de autenticación con Google API');
+                  throw new Error('Token de acceso inválido - Verificar Service Account');
+                  
+                } else if (updateResponse.status === 400) {
+                  console.error('🚫 DIAGNÓSTICO: Error 400 - Bad Request');
+                  console.error('🚫 CAUSA PROBABLE: Formato de petición incorrecto');
+                  console.error('🚫 RANGO:', rango);
+                  console.error('🚫 DATOS:', requestBody);
+                  console.error('💡 SOLUCIÓN: Verificar formato de datos');
+                  
+                  alert('🚫 ERROR 400: Formato de datos incorrecto');
+                  throw new Error('Formato de petición inválido');
+                  
+                } else if (updateResponse.status === 404) {
+                  console.error('🚫 DIAGNÓSTICO: Error 404 - Not Found');
+                  console.error('🚫 CAUSA PROBABLE: Spreadsheet ID o rango incorrecto');
+                  console.error('🚫 SPREADSHEET ID:', this.spreadsheetId);
+                  console.error('🚫 RANGO:', rango);
+                  console.error('💡 SOLUCIÓN: Verificar ID de hoja y rango');
+                  
+                  alert('🚫 ERROR 404: Google Sheets no encontrado - Verificar ID');
+                  throw new Error('Google Sheets no encontrado');
+                  
                 } else {
-                  console.error('🚫 PROBLEMA: Error desconocido:', updateResponse.status);
-                  alert(`🚫 ERROR: ${updateResponse.status} - ${errorData.error?.message || 'Error desconocido'}`);
-                  throw new Error(`Error ${updateResponse.status}: ${errorData.error?.message || 'Error desconocido'}`);
+                  console.error('🚫 DIAGNÓSTICO: Error desconocido:', updateResponse.status);
+                  console.error('🚫 DETALLES COMPLETOS:', {
+                    status: updateResponse.status,
+                    statusText: updateResponse.statusText,
+                    errorData: errorData,
+                    errorText: errorText
+                  });
+                  
+                  alert(`🚫 ERROR ${updateResponse.status}: ${errorData?.error?.message || 'Error desconocido'}
+
+Revisa la consola del navegador para más detalles.`);
+                  throw new Error(`Error ${updateResponse.status}: ${errorData?.error?.message || 'Error desconocido'}`);
                 }
               }
               
