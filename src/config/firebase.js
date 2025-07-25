@@ -5,12 +5,12 @@ import { getFirestore } from 'firebase/firestore';
 
 // Your Firebase config - Replace with your actual config
 const firebaseConfig = {
-  apiKey: "your-api-key",
-  authDomain: "your-project.firebaseapp.com",
-  projectId: "your-project-id",
-  storageBucket: "your-project.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "your-app-id"
+  apiKey: "AIzaSyD6BAUUl88zq4WtUDyHOlWD7pxjpZtR70o",
+  authDomain: "panel-anteojos.firebaseapp.com",
+  projectId: "panel-anteojos",
+  storageBucket: "panel-anteojos.firebasestorage.app",
+  messagingSenderId: "795138195199",
+  appId: "1:795138195199:web:111964af328456db3996ca"
 };
 
 // Initialize Firebase

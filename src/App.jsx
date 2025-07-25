@@ -1,5 +1,18 @@
 import { useState, useEffect } from 'react';
 import GoogleSheetsConfig from './components/GoogleSheetsConfig.jsx';
+import { db } from './config/firebase.js';
+import { 
+  collection, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  doc, 
+  getDocs, 
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp 
+} from 'firebase/firestore';
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -334,34 +347,8 @@ function DashboardSection() {
 
 // Componente de Vendedores
 function VendedoresSection() {
-  const [vendedores, setVendedores] = useState([
-    { 
-      id: 1, 
-      nombre: 'Ana García', 
-      email: 'ana@empresa.com', 
-      dni: '12345678',
-      telefono: '+54 11 1234-5678',
-      direccion: 'Av. Corrientes 1234, CABA',
-      fechaNacimiento: '1990-05-15',
-      fechaIngreso: '2024-01-15',
-      saldo: 2502500, 
-      activo: true 
-    },
-    { 
-      id: 2, 
-      nombre: 'Carlos López', 
-      email: 'carlos@empresa.com', 
-      dni: '23456789',
-      telefono: '+54 11 2345-6789',
-      direccion: 'Av. Santa Fe 5678, CABA',
-      fechaNacimiento: '1985-08-22',
-      fechaIngreso: '2023-11-10',
-      saldo: -800, 
-      activo: true 
-    }
-  ]);
-
-  // Lista de conceptos personalizables
+  const [vendedores, setVendedores] = useState([]);
+  const [movimientosVendedores, setMovimientosVendedores] = useState([]);
   const [conceptosPersonalizados, setConceptosPersonalizados] = useState([
     'VENTA',
     'DEVOLUCION', 
@@ -372,6 +359,71 @@ function VendedoresSection() {
     'Adelanto de sueldo',
     'Ajuste por error'
   ]);
+
+  // Cargar datos desde Firebase
+  useEffect(() => {
+    // Cargar vendedores
+    const unsubscribeVendedores = onSnapshot(
+      query(collection(db, 'vendedores'), orderBy('fechaIngreso', 'desc')), 
+      (snapshot) => {
+        const vendedoresData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setVendedores(vendedoresData);
+      },
+      (error) => {
+        console.error('Error al cargar vendedores:', error);
+        // Si hay error, usar datos por defecto
+        setVendedores([
+          { 
+            id: 'default1', 
+            nombre: 'Ana García', 
+            email: 'ana@empresa.com', 
+            dni: '12345678',
+            telefono: '+54 11 1234-5678',
+            direccion: 'Av. Corrientes 1234, CABA',
+            fechaNacimiento: '1990-05-15',
+            fechaIngreso: '2024-01-15',
+            saldo: 2502500, 
+            activo: true 
+          },
+          { 
+            id: 'default2', 
+            nombre: 'Carlos López', 
+            email: 'carlos@empresa.com', 
+            dni: '23456789',
+            telefono: '+54 11 2345-6789',
+            direccion: 'Av. Santa Fe 5678, CABA',
+            fechaNacimiento: '1985-08-22',
+            fechaIngreso: '2023-11-10',
+            saldo: -800, 
+            activo: true 
+          }
+        ]);
+      }
+    );
+
+    // Cargar movimientos de vendedores
+    const unsubscribeMovimientos = onSnapshot(
+      query(collection(db, 'movimientos_vendedores'), orderBy('fecha', 'desc')), 
+      (snapshot) => {
+        const movimientosData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setMovimientosVendedores(movimientosData);
+      },
+      (error) => {
+        console.error('Error al cargar movimientos:', error);
+      }
+    );
+
+    return () => {
+      unsubscribeVendedores();
+      unsubscribeMovimientos();
+    };
+  }, []);
 
   const [showModal, setShowModal] = useState(false);
   const [showDetalleVendedor, setShowDetalleVendedor] = useState(false);
@@ -389,50 +441,6 @@ function VendedoresSection() {
     concepto: '',
     numeroOptica: ''
   });
-
-  // Datos de movimientos de vendedores
-  const [movimientosVendedores, setMovimientosVendedores] = useState([
-    {
-      id: 1,
-      vendedorId: 1,
-      fecha: '2025-01-20',
-      tipo: 'haber',
-      monto: 3000,
-      concepto: 'Comisión por ventas',
-      descripcion: 'Comisión mensual enero 2025',
-      numeroOptica: '001'
-    },
-    {
-      id: 2,
-      vendedorId: 1,
-      fecha: '2025-01-22',
-      tipo: 'debe',
-      monto: 500,
-      concepto: 'Descuento',
-      descripcion: 'Descuento por producto defectuoso',
-      numeroOptica: '002'
-    },
-    {
-      id: 3,
-      vendedorId: 1,
-      fecha: '2025-07-25',
-      tipo: 'haber',
-      monto: 1500000,
-      concepto: 'PAGO',
-      descripcion: 'pago optica cristal',
-      numeroOptica: '003'
-    },
-    {
-      id: 4,
-      vendedorId: 1,
-      fecha: '2025-07-25',
-      tipo: 'haber',
-      monto: 1000000,
-      concepto: 'PAGO',
-      descripcion: 'OPTICA MANZO',
-      numeroOptica: '004'
-    }
-  ]);
 
   // Función para agregar nuevo concepto
   const agregarNuevoConcepto = (nuevoConcepto) => {
